@@ -1,0 +1,12 @@
+[package]
+name = "infera"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "infera"
+crate-type = ["staticlib"]
+
+[features]
+duckdb_extension = []

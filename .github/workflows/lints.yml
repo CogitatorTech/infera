@@ -1,0 +1,29 @@
+name: Run Linters
+
+on:
+  workflow_dispatch: { } # Allow manual execution
+  push:
+    tags:
+      - 'v*' # Trigger on version tags
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang curl pkg-config libssl-dev make
+          make install-deps
+
+      - name: Run Linters
+        run: make lint
