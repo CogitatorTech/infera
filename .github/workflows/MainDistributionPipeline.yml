@@ -23,4 +23,3 @@ jobs:
       extension_name: infera
       enable_rust: true
       exclude_archs: "windows_amd64_rtools;wasm_mvp;wasm_eh;wasm_threads"
-

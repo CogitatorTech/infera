@@ -54,6 +54,26 @@ rust-doc: rust-format ## Generate Rust documentation
 	@cargo doc --manifest-path infera/Cargo.toml --no-deps --document-private-items
 
 ###########################################
+# General Development Targets
+###########################################
+
+.PHONY: sync-externals
+sync-externals: ## Sync external submodules (DuckDB and extension-ci-tools)
+	@echo "Syncing external submodules..."
+	@git submodule update --init --recursive
+	@echo "External submodules synced."
+
+.PHONY: setup-hooks
+setup-hooks: ## Install Git hooks (pre-commit and pre-push)
+	pre-commit install --hook-type pre-commit
+	pre-commit install --hook-type pre-push
+	pre-commit install-hooks
+
+.PHONY: test-hooks
+test-hooks: ## Test Git hooks on all files
+	pre-commit run --all-files
+
+###########################################
 # DuckDB Extension Targets
 ###########################################
 
