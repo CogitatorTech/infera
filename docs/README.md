@@ -2,7 +2,7 @@
 
 A DuckDB extension powered by Rust that demonstrates how to integrate Rust code with DuckDB's extension system.
 
-<img src="../assets/logos/rustacean-flat-noshadow.svg" align="center" width="25%"/>
+<img src="../logo.svg" align="center" width="25%"/>
 
 ## Overview
 

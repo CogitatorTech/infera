@@ -11,6 +11,13 @@ EXT_CONFIG := ${PROJ_DIR}extension_config.cmake
 # Test files location
 TESTS_DIR := tests
 
+# Include the official DuckDB extension makefile
+include external/extension-ci-tools/makefiles/duckdb_extension.Makefile
+
+# Override the set_duckdb_version target to use the correct path
+set_duckdb_version:
+	cd external/duckdb && git checkout $(DUCKDB_GIT_VERSION)
+
 # Default target
 .DEFAULT_GOAL := help
 
@@ -149,24 +156,3 @@ test-sql: ## Run SQL tests from file
 test-python: ## Run Python test suite
 	@echo "Running Python test suite..."
 	@python3 $(TESTS_DIR)/test_extension.py
-
-###########################################
-# DuckDB Extension CI/Build System
-###########################################
-
-# Include the DuckDB extension build system
-include external/extension-ci-tools/makefiles/duckdb_extension.Makefile
-
-# Fallback manual release build target
-.PHONY: release-ext
-release-ext: ## Build DuckDB + extension (manual fallback)
-	@echo "[infera] Manual extension release build (fallback target)"
-	@echo "[infera] Building Rust static library (cargo build --release --features duckdb_extension)"
-	@cargo build --release --features duckdb_extension --manifest-path infera/Cargo.toml
-	@mkdir -p build/release
-	@cmake $(GENERATOR) $(BUILD_FLAGS) $(EXT_RELEASE_FLAGS) $(VCPKG_MANIFEST_FLAGS) -DCMAKE_BUILD_TYPE=Release -S $(DUCKDB_SRCDIR) -B build/release
-	@cmake --build build/release --config Release
-
-# Ensure standard 'release' target maps to our fallback if the included one is inert
-.PHONY: release
-release: rust-binding-headers release-ext

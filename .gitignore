@@ -94,5 +94,5 @@ testext
 target/
 *_output.txt
 standalone-build/
-rust.h
+#rust.h
 uv.lock

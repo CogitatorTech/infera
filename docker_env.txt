@@ -1,0 +1,8 @@
+VCPKG_BINARY_SOURCES=clear;http,https://vcpkg-cache.duckdb.org,read
+VCPKG_TOOLCHAIN_PATH=/vcpkg/scripts/buildsystems/vcpkg.cmake
+VCPKG_TARGET_TRIPLET=x64-linux-release
+VCPKG_HOST_TRIPLET=x64-linux-release
+GEN=ninja
+BUILD_SHELL=1
+DUCKDB_PLATFORM=linux_amd64_musl
+

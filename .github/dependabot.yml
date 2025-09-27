@@ -1,6 +1,0 @@
-version: 2
-updates:
-  - package-ecosystem: "cargo"
-    directory: "/duckdb_infera_rust"
-    schedule:
-      interval: "daily"
