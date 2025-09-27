@@ -19,7 +19,7 @@ if (EXISTS ${INFERA_RUST_LIB})
     )
 
     # Add the Rust library to global link libraries so it gets linked to everything
-    # This is the most reliable way to ensure all targets get the symbols
+    # This is the most reliable way to guarantee all targets get the symbols
     link_libraries(${INFERA_RUST_LIB} pthread dl m)
 
     # Also try to link to specific extension targets if they exist
@@ -34,7 +34,7 @@ if (EXISTS ${INFERA_RUST_LIB})
     endif()
 
     # Use a generator expression to add the library to all executable targets
-    # This should catch the shell target when it's created
+    # This should catch the shell target when it's created by DuckDB's test framework
     add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:${INFERA_RUST_LIB}>)
     add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-lpthread>)
     add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-ldl>)

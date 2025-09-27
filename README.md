@@ -24,6 +24,13 @@ data.
 
 - Load and use machine learning models from popular frameworks like TensorFlow, PyTorch, ONNX, etc.
 - Execute inference directly within DuckDB queries.
+- **ONNX Model Support**: Load and run inference on ONNX models using the Tract inference engine
+- **Thread-Safe**: Concurrent model access and inference with optimized locking
+- **Memory Efficient**: Zero-copy data transfer and automatic memory management
+- **Production Ready**: Comprehensive error handling, logging, and resource cleanup
+- **Simple API**: Easy-to-use SQL functions for model management and inference
+- **Type Safety**: Robust type conversion and validation for SQL data types
+- **Variable Inputs**: Support for models with different numbers of input features
 
 ---
 

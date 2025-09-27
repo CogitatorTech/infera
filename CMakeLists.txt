@@ -4,6 +4,8 @@ set(CORROSION_VERBOSE_OUTPUT ON)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED 1)
 
+option(INFERA_ENABLE_ONNX "Enable ONNX (tract) inference backend in Rust crate" ON)
+
 # --- Fallback platform detection (only if DuckDB build system did not set these) ---
 # DuckDB's extension build usually injects OS_NAME / OS_ARCH / DUCKDB_PLATFORM.
 # When users run `cmake .` manually these are empty -> we derive sensible defaults.
@@ -31,7 +33,12 @@ elseif(_INFERA_OS_ARCH STREQUAL "aarch64" OR _INFERA_OS_ARCH STREQUAL "arm64")
 endif()
 set(OS_ARCH "${_INFERA_OS_ARCH}")
 
-# Derive DUCKDB_PLATFORM if missing (rough heuristic mirroring DuckDB naming)
+# Derive DUCKDB_PLATFORM if missing (this is a rough heuristic mirroring DuckDB naming convention)
+# Valid values: linux_amd64, linux_arm64, osx_amd64, osx_arm64, osx_universal, windows_amd64
+# Note: we do not currently handle Windows ARM (windows_arm64) as DuckDB does not provide such builds.
+# Note: we do not currently handle musl vs gnu variants on Linux; users can manually set DUCKDB_PLATFORM if needed.
+# Note: we do not currently handle wasm variants; users can manually set DUCKDB_PLATFORM if needed.
+set(DUCKDB_PLATFORM "${DUCKDB_PLATFORM}")
 if("${DUCKDB_PLATFORM}" STREQUAL "")
   if(_INFERA_OS_NAME STREQUAL "linux")
     if(_INFERA_OS_ARCH STREQUAL "amd64")
@@ -137,7 +144,13 @@ endif()
 
 if(NOT INFERA_IN_TREE_DUCKDB_BUILD)
   message(STATUS "[infera] Standalone mode: importing Rust crate via Corrosion (${INFERA_CRATE_MANIFEST})")
-  corrosion_import_crate(MANIFEST_PATH "${INFERA_CRATE_MANIFEST}" CRATES "infera")
+  # Compose feature list for Rust build
+  set(INFERA_RUST_FEATURES duckdb_extension)
+  if(INFERA_ENABLE_ONNX)
+    list(APPEND INFERA_RUST_FEATURES tract)
+  endif()
+  message(STATUS "[infera] Rust features: ${INFERA_RUST_FEATURES}")
+  corrosion_import_crate(MANIFEST_PATH "${INFERA_CRATE_MANIFEST}" CRATES "infera" FEATURES ${INFERA_RUST_FEATURES})
 else()
   message(STATUS "[infera] In-tree DuckDB build detected; skipping Corrosion import (Rust static lib expected to be pre-built and linked via extension_config.cmake)")
 endif()
