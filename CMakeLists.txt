@@ -147,8 +147,8 @@ set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 project(${TARGET_NAME})
 
-include_directories(bindings/include)
-set(EXTENSION_SOURCES bindings/infera_extension.cpp)
+include_directories(infera/bindings/include)
+set(EXTENSION_SOURCES infera/bindings/infera_extension.cpp)
 
 # Remove previous attempt to include DuckDB extension macros when unavailable.
 # For a plain standalone configure (cmake ..) we just build the Rust crate; the

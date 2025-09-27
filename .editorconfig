@@ -5,12 +5,12 @@ root = true
 
 # Global settings (applicable to all files unless overridden)
 [*]
-charset = utf-8 # Default character encoding
-end_of_line = lf # Use LF for line endings (Unix-style)
-indent_style = space # Use spaces for indentation
-indent_size = 4 # Default indentation size
-insert_final_newline = true # Make sure files end with a newline
-trim_trailing_whitespace = true # Remove trailing whitespace
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
 
 # Rust files
 [*.rs]
@@ -19,7 +19,7 @@ max_line_length = 100
 # Markdown files
 [*.md]
 max_line_length = 120
-trim_trailing_whitespace = false # Don't remove trailing whitespace in Markdown files
+trim_trailing_whitespace = false
 
 # Bash scripts
 [*.sh]
@@ -28,3 +28,8 @@ indent_size = 2
 # YAML files
 [*.{yaml,yml}]
 indent_size = 2
+
+# C & C++ files
+[*.{c,cpp,h,hpp}]
+indent_size = 2
+max_line_length = 100

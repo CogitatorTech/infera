@@ -1,5 +1,4 @@
 use std::ffi::{c_char, CString};
-use std::ptr;
 
 /// # Safety
 ///

@@ -92,7 +92,7 @@ rust-lib: rust-format ## Build the Rust static library
 .PHONY: rust-binding-headers
 rust-binding-headers: ## Generate Rust binding headers
 	@echo "Generating Rust binding headers..."
-	@cd infera && cbindgen --config ./cbindgen.toml --crate infera --output ../bindings/include/rust.h
+	@cd infera && cbindgen --config ./cbindgen.toml --crate infera --output bindings/include/rust.h
 
 .PHONY: build-ext
 build-ext: rust-lib rust-binding-headers ## Build the DuckDB extension (Rust + headers)
@@ -102,8 +102,8 @@ build-ext: rust-lib rust-binding-headers ## Build the DuckDB extension (Rust + h
 rust-clean: ## Remove Rust generated and temporary files
 	@echo "Cleaning Rust artifacts..."
 	@cargo clean --manifest-path infera/Cargo.toml
-	@rm -rf build/
-	@rm -f bindings/include/rust.h
+	@rm -rf build/ infera/target/
+	#@rm -f infera/bindings/include/rust.h
 
 ###########################################
 # Development Dependencies

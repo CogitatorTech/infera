@@ -2,43 +2,44 @@
 <!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
 
 <svg
-   fill="#000000"
-   width="800px"
-   height="800px"
-   viewBox="0 0 32 32"
-   version="1.1"
-   id="svg6"
-   sodipodi:docname="overmind-svgrepo-com.svg"
-   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
-   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
-   xmlns="http://www.w3.org/2000/svg"
-   xmlns:svg="http://www.w3.org/2000/svg">
-  <defs
-     id="defs10" />
-  <sodipodi:namedview
-     id="namedview8"
-     pagecolor="#ffffff"
-     bordercolor="#000000"
-     borderopacity="0.25"
-     inkscape:showpageshadow="2"
-     inkscape:pageopacity="0.0"
-     inkscape:pagecheckerboard="0"
-     inkscape:deskcolor="#d1d1d1"
-     showgrid="false"
-     inkscape:zoom="0.295"
-     inkscape:cx="401.69492"
-     inkscape:cy="401.69492"
-     inkscape:window-width="1862"
-     inkscape:window-height="1131"
-     inkscape:window-x="58"
-     inkscape:window-y="32"
-     inkscape:window-maximized="1"
-     inkscape:current-layer="svg6" />
-  <title
-     id="title2">overmind</title>
-  <path
-     d="M16 13.218c1.924 0 4.811-0.962 4.811-2.887s-0.962-4.811-4.811-8.66c-3.849 3.849-4.811 6.736-4.811 8.66s2.887 2.887 4.811 2.887v0zM21 21.878c-0.962 1.667-1.572 4.648 0.094 5.61s4.648 1.572 9.906 0.164c-1.409-5.258-3.428-7.534-5.094-8.497s-3.943 1.056-4.906 2.723v0zM11 21.878c-0.962-1.667-3.239-3.685-4.906-2.723s-3.685 3.239-5.094 8.497c5.258 1.409 8.239 0.799 9.906-0.164s1.056-3.943 0.094-5.61v0zM16 24.764c-0.962 0-1.924 0.962-1.924 1.925s0 1.924 1.924 3.849c1.924-1.924 1.924-2.887 1.924-3.849s-0.962-1.925-1.924-1.925zM21 16.104c0.481 0.833 1.795 1.186 2.629 0.704s1.667-0.962 2.371-3.591c-2.629-0.704-3.462-0.223-4.296 0.258s-1.185 1.795-0.704 2.629v0zM11 16.104c0.481-0.833 0.129-2.148-0.704-2.629s-1.667-0.962-4.295-0.258c0.704 2.629 1.538 3.11 2.371 3.591s2.148 0.129 2.629-0.704v0zM19.849 18.991c0 2.126-1.724 3.849-3.849 3.849s-3.849-1.724-3.849-3.849c0-2.126 1.724-3.849 3.849-3.849s3.849 1.724 3.849 3.849z"
-     id="path4"
-     style="fill:#220055" />
+    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+    fill="#000000"
+    width="800px"
+    height="800px"
+    viewBox="0 0 32 32"
+    version="1.1"
+    id="svg6"
+    sodipodi:docname="overmind-svgrepo-com.svg"
+    inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+    xmlns="http://www.w3.org/2000/svg"
+>
+    <defs
+        id="defs10"/>
+    <sodipodi:namedview
+        id="namedview8"
+        pagecolor="#ffffff"
+        bordercolor="#000000"
+        borderopacity="0.25"
+        inkscape:showpageshadow="2"
+        inkscape:pageopacity="0.0"
+        inkscape:pagecheckerboard="0"
+        inkscape:deskcolor="#d1d1d1"
+        showgrid="false"
+        inkscape:zoom="0.295"
+        inkscape:cx="401.69492"
+        inkscape:cy="401.69492"
+        inkscape:window-width="1862"
+        inkscape:window-height="1131"
+        inkscape:window-x="58"
+        inkscape:window-y="32"
+        inkscape:window-maximized="1"
+        inkscape:current-layer="svg6"/>
+    <title
+        id="title2">overmind
+    </title>
+    <path
+        d="M16 13.218c1.924 0 4.811-0.962 4.811-2.887s-0.962-4.811-4.811-8.66c-3.849 3.849-4.811 6.736-4.811 8.66s2.887 2.887 4.811 2.887v0zM21 21.878c-0.962 1.667-1.572 4.648 0.094 5.61s4.648 1.572 9.906 0.164c-1.409-5.258-3.428-7.534-5.094-8.497s-3.943 1.056-4.906 2.723v0zM11 21.878c-0.962-1.667-3.239-3.685-4.906-2.723s-3.685 3.239-5.094 8.497c5.258 1.409 8.239 0.799 9.906-0.164s1.056-3.943 0.094-5.61v0zM16 24.764c-0.962 0-1.924 0.962-1.924 1.925s0 1.924 1.924 3.849c1.924-1.924 1.924-2.887 1.924-3.849s-0.962-1.925-1.924-1.925zM21 16.104c0.481 0.833 1.795 1.186 2.629 0.704s1.667-0.962 2.371-3.591c-2.629-0.704-3.462-0.223-4.296 0.258s-1.185 1.795-0.704 2.629v0zM11 16.104c0.481-0.833 0.129-2.148-0.704-2.629s-1.667-0.962-4.295-0.258c0.704 2.629 1.538 3.11 2.371 3.591s2.148 0.129 2.629-0.704v0zM19.849 18.991c0 2.126-1.724 3.849-3.849 3.849s-3.849-1.724-3.849-3.849c0-2.126 1.724-3.849 3.849-3.849s3.849 1.724 3.849 3.849z"
+        id="path4"
+        style="fill:#220055"/>
 </svg>

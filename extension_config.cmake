@@ -1,5 +1,4 @@
-# Ensure the bindings/include directory (containing infera_extension.hpp & rust.h) is on the include path
-include_directories(${CMAKE_CURRENT_LIST_DIR}/bindings/include)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/infera/bindings/include)
 
 duckdb_extension_load(infera
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}

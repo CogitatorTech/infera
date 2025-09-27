@@ -8,6 +8,7 @@ import sys
 import time
 from pathlib import Path
 
+
 def run_duckdb_query(query, duckdb_path="./build/release/duckdb"):
     """Run a DuckDB query and return the result"""
     try:
@@ -27,6 +28,7 @@ def run_duckdb_query(query, duckdb_path="./build/release/duckdb"):
         print("Please run 'make release' first to build the extension")
         return None
 
+
 def test_basic_functionality():
     """Test basic extension functionality"""
     print("🧪 Testing basic functionality...")
@@ -40,6 +42,7 @@ def test_basic_functionality():
         print("❌ hello_infera() function failed")
         print(f"Got result: {result}")
         return False
+
 
 def test_function_properties():
     """Test function properties and metadata"""
@@ -64,6 +67,7 @@ def test_function_properties():
 
     return True
 
+
 def test_performance():
     """Test extension performance"""
     print("🧪 Testing performance...")
@@ -80,6 +84,7 @@ def test_performance():
         print("❌ Performance test failed")
         return False
 
+
 def test_extension_info():
     """Test extension information"""
     print("🧪 Testing extension information...")
@@ -92,6 +97,7 @@ def test_extension_info():
     else:
         print("❌ Extension not found in loaded extensions")
         return False
+
 
 def main():
     """Run all tests"""
@@ -142,6 +148,7 @@ def main():
     else:
         print("💥 Some tests failed!")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
