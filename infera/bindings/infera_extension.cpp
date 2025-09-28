@@ -11,6 +11,7 @@
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -116,7 +117,6 @@ static void OnnxPredict(DataChunk &args, ExpressionState &state,
   }
   std::string model_name_str = model_name_val.ToString();
 
-  // Collect all features for the batch
   const idx_t batch_size = args.size();
   const idx_t feature_count = args.ColumnCount() - 1;
   std::vector<float> features;
@@ -151,7 +151,6 @@ static void OnnxPredict(DataChunk &args, ExpressionState &state,
     }
   }
 
-  // Run inference on the entire batch
   InferaInferenceResult res = infera_run_inference(
       model_name_str.c_str(), features.data(), batch_size, feature_count);
 
@@ -160,7 +159,6 @@ static void OnnxPredict(DataChunk &args, ExpressionState &state,
                                 model_name_str + "': " + GetInferaError());
   }
 
-  // Validate result shape for this single-output function
   if (res.rows != batch_size || res.cols != 1) {
     std::string err_msg = StringUtil::Format(
         "Model output shape mismatch. Expected (%d, 1), but got (%d, %d).",
@@ -169,7 +167,6 @@ static void OnnxPredict(DataChunk &args, ExpressionState &state,
     throw InvalidInputException(err_msg);
   }
 
-  // Populate the result vector
   result.SetVectorType(VectorType::FLAT_VECTOR);
   auto result_data = FlatVector::GetData<float>(result);
   for (idx_t i = 0; i < batch_size; i++) {
@@ -179,7 +176,62 @@ static void OnnxPredict(DataChunk &args, ExpressionState &state,
   infera_free_result(res);
 }
 
-// List all loaded models (returns a JSON array)
+// Prediction function for BLOB inputs, returning a LIST<FLOAT>
+static void InferaPredictBlob(DataChunk &args, ExpressionState &state,
+                              Vector &result) {
+  if (args.ColumnCount() != 2) {
+    throw InvalidInputException(
+        "infera_predict_blob(model_name, input_blob) requires 2 arguments");
+  }
+  if (args.size() == 0) {
+    return;
+  }
+
+  auto &model_name_vec = args.data[0];
+  auto &blob_vec = args.data[1];
+
+  result.SetVectorType(VectorType::FLAT_VECTOR);
+
+  for (idx_t i = 0; i < args.size(); i++) {
+    auto model_name_val = model_name_vec.GetValue(i);
+    auto blob_val = blob_vec.GetValue(i);
+
+    if (model_name_val.IsNull() || blob_val.IsNull()) {
+      // Set NULL for this row
+      result.SetValue(i, Value());
+      continue;
+    }
+
+    std::string model_name_str = model_name_val.ToString();
+    string_t blob_str_t = blob_val.GetValueUnsafe<string_t>();
+
+    auto blob_ptr = reinterpret_cast<const uint8_t *>(blob_str_t.GetDataUnsafe());
+    auto blob_len = blob_str_t.GetSize();
+
+    InferaInferenceResult res = infera_predict_blob(model_name_str.c_str(), blob_ptr, blob_len);
+
+    if (res.status != 0) {
+      infera_free_result(res);
+      throw InvalidInputException("Inference failed for model '" +
+                                  model_name_str + "': " + GetInferaError());
+    }
+
+    // Build a Value::LIST for this row from the returned floats
+    std::vector<Value> elems;
+    elems.reserve(res.len);
+    for (size_t j = 0; j < res.len; ++j) {
+      elems.emplace_back(Value::FLOAT(res.data[j]));
+    }
+    result.SetValue(i, Value::LIST(std::move(elems)));
+
+    infera_free_result(res);
+  }
+
+  result.Verify(args.size());
+}
+
+
+// List all loaded models
 static void ListModels(DataChunk &args, ExpressionState &state,
                        Vector &result) {
   char *models_json = infera_list_models();
@@ -197,7 +249,6 @@ static void ModelInfo(DataChunk &args, ExpressionState &state, Vector &result) {
     throw InvalidInputException(
         "model_info(model_name) expects exactly 1 argument");
   }
-
   auto &model_name_vec = args.data[0];
   if (args.size() == 0) {
     return;
@@ -218,7 +269,7 @@ static void ModelInfo(DataChunk &args, ExpressionState &state, Vector &result) {
   infera_free(info_json);
 }
 
-// Multi-output prediction function (returns a JSON array)
+// Multi-output prediction function
 static void OnnxPredictMulti(DataChunk &args, ExpressionState &state,
                              Vector &result) {
   if (args.ColumnCount() < 2) {
@@ -237,7 +288,6 @@ static void OnnxPredictMulti(DataChunk &args, ExpressionState &state,
   }
   std::string model_name_str = model_name_val.ToString();
 
-  // Collect all features for the batch
   const idx_t batch_size = args.size();
   const idx_t feature_count = args.ColumnCount() - 1;
   std::vector<float> features;
@@ -272,16 +322,15 @@ static void OnnxPredictMulti(DataChunk &args, ExpressionState &state,
     }
   }
 
-  // Run inference on the entire batch
   InferaInferenceResult res = infera_run_inference(
       model_name_str.c_str(), features.data(), batch_size, feature_count);
 
   if (res.status != 0) {
+    infera_free_result(res);
     throw InvalidInputException("Inference failed for model '" +
                                 model_name_str + "': " + GetInferaError());
   }
 
-  // Validate result shape
   if (res.rows != batch_size) {
     std::string err_msg = StringUtil::Format(
         "Model output row count mismatch. Expected %d, but got %d.",
@@ -290,7 +339,6 @@ static void OnnxPredictMulti(DataChunk &args, ExpressionState &state,
     throw InvalidInputException(err_msg);
   }
 
-  // Populate the result vector with JSON strings
   result.SetVectorType(VectorType::FLAT_VECTOR);
   auto result_data = FlatVector::GetData<string_t>(result);
   const size_t output_cols = res.cols;
@@ -330,7 +378,6 @@ static void ModelMetadataFunc(DataChunk &args, ExpressionState &state,
   ModelMetadata meta = infera_get_model_metadata(model_name_str.c_str());
   std::string json;
   if (meta.input_shape_len == 0 && meta.output_shape_len == 0) {
-    // On error, fetch last error message
     json = std::string("{\"error\": \"") + GetInferaError() + "\"}";
   } else {
     json = "{";
@@ -372,33 +419,35 @@ static void LoadInternal(ExtensionLoader &loader) {
                                         LogicalType::BOOLEAN, UnloadOnnxModel);
   loader.RegisterFunction(unload_onnx_model_func);
 
-  // Register inference functions with variable number of arguments
   ScalarFunctionSet onnx_predict_set("onnx_predict");
   for (idx_t param_count = 2; param_count <= 10; param_count++) {
     vector<LogicalType> arguments;
-    arguments.push_back(LogicalType::VARCHAR); // model_name
+    arguments.push_back(LogicalType::VARCHAR);
     for (idx_t i = 1; i < param_count; i++) {
-      arguments.push_back(LogicalType::FLOAT); // features
+      arguments.push_back(LogicalType::FLOAT);
     }
     onnx_predict_set.AddFunction(
         ScalarFunction(arguments, LogicalType::FLOAT, OnnxPredict));
   }
   loader.RegisterFunction(onnx_predict_set);
 
-  // Multi-output prediction function
   ScalarFunctionSet onnx_predict_multi_set("onnx_predict_multi");
   for (idx_t param_count = 2; param_count <= 10; param_count++) {
     vector<LogicalType> arguments;
-    arguments.push_back(LogicalType::VARCHAR); // model_name
+    arguments.push_back(LogicalType::VARCHAR);
     for (idx_t i = 1; i < param_count; i++) {
-      arguments.push_back(LogicalType::FLOAT); // features
+      arguments.push_back(LogicalType::FLOAT);
     }
     onnx_predict_multi_set.AddFunction(
         ScalarFunction(arguments, LogicalType::VARCHAR, OnnxPredictMulti));
   }
   loader.RegisterFunction(onnx_predict_multi_set);
 
-  // Utility functions
+  // New BLOB prediction function
+  ScalarFunction infera_predict_blob_func("infera_predict_blob", {LogicalType::VARCHAR, LogicalType::BLOB},
+                                     LogicalType::LIST(LogicalType::FLOAT), InferaPredictBlob);
+  loader.RegisterFunction(infera_predict_blob_func);
+
   ScalarFunction list_models_func("list_models", {}, LogicalType::VARCHAR,
                                   ListModels);
   loader.RegisterFunction(list_models_func);
@@ -407,14 +456,12 @@ static void LoadInternal(ExtensionLoader &loader) {
                                  LogicalType::VARCHAR, ModelInfo);
   loader.RegisterFunction(model_info_func);
 
-  // Register model_metadata JSON function
   ScalarFunction model_metadata_func("model_metadata", {LogicalType::VARCHAR},
                                      LogicalType::VARCHAR, ModelMetadataFunc);
   loader.RegisterFunction(model_metadata_func);
 }
 
 void InferaExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }
-
 std::string InferaExtension::Name() { return "infera"; }
 std::string InferaExtension::Version() const { return "v0.1.0"; }
 
@@ -426,7 +473,6 @@ DUCKDB_EXTENSION_API void infera_init(duckdb::DatabaseInstance &db) {
   duckdb::ExtensionLoader loader(db, "infera");
   LoadInternal(loader);
 }
-
 DUCKDB_EXTENSION_API const char *infera_version() {
   return duckdb::DuckDB::LibraryVersion();
 }

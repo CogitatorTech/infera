@@ -36,6 +36,7 @@ include = [
     "infera_load_onnx_model",
     "infera_unload_onnx_model",
     "infera_run_inference",
+    "infera_predict_blob",
     "infera_get_model_metadata",
     "infera_list_models",
     "infera_last_error",

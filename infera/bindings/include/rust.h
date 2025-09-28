@@ -41,6 +41,10 @@ InferaInferenceResult infera_run_inference(const char *model_name,
                                            const float *data, size_t rows,
                                            size_t cols);
 
+InferaInferenceResult infera_predict_blob(const char *model_name,
+                                          const uint8_t *blob_data,
+                                          size_t blob_len);
+
 // Utility functions
 char *infera_list_models(void);
 char *infera_model_info(const char *model_name);
