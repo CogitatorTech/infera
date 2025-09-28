@@ -133,26 +133,6 @@ pub unsafe extern "C" fn infera_free_result(res: InferaInferenceResult) {
     }
 }
 
-#[repr(C)]
-pub struct ModelMetadata {
-    pub input_shape: *mut i64,
-    pub input_shape_len: usize,
-    pub output_shape: *mut i64,
-    pub output_shape_len: usize,
-    pub input_count: usize,
-    pub output_count: usize,
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn infera_free_metadata(meta: ModelMetadata) {
-    if !meta.input_shape.is_null() && meta.input_shape_len > 0 {
-        let _ = Vec::from_raw_parts(meta.input_shape, meta.input_shape_len, meta.input_shape_len);
-    }
-    if !meta.output_shape.is_null() && meta.output_shape_len > 0 {
-        let _ = Vec::from_raw_parts(meta.output_shape, meta.output_shape_len, meta.output_shape_len);
-    }
-}
-
 #[no_mangle]
 pub extern "C" fn infera_load_onnx_model(name: *const c_char, path: *const c_char) -> i32 {
     let result = (|| -> Result<(), InferaError> {
@@ -297,37 +277,43 @@ fn run_inference_blob_impl(_model_name: &str, _blob_data: *const u8, _blob_len: 
 }
 
 #[no_mangle]
-pub extern "C" fn infera_get_model_metadata(model_name: *const c_char) -> ModelMetadata {
-    let result = (|| -> Result<ModelMetadata, InferaError> {
+pub extern "C" fn infera_get_model_metadata(model_name: *const c_char) -> *mut c_char {
+    let result = (|| -> Result<String, InferaError> {
         if model_name.is_null() { return Err(InferaError::NullPointer); }
         let name_str = unsafe { CStr::from_ptr(model_name) }.to_str().map_err(|_| InferaError::Utf8Error)?;
         get_model_metadata_impl(name_str)
     })();
     match result {
-        Ok(meta) => meta,
+        Ok(json) => CString::new(json).unwrap_or_default().into_raw(),
         Err(e) => {
             set_last_error(&e);
-            ModelMetadata { input_shape: std::ptr::null_mut(), input_shape_len: 0, output_shape: std::ptr::null_mut(), output_shape_len: 0, input_count: 0, output_count: 0, }
+            let error_json = json!({ "error": e.to_string() }).to_string();
+            CString::new(error_json).unwrap_or_default().into_raw()
         }
     }
 }
 
 #[cfg(feature = "tract")]
-fn get_model_metadata_impl(model_name: &str) -> Result<ModelMetadata, InferaError> {
+fn get_model_metadata_impl(model_name: &str) -> Result<String, InferaError> {
     let models = MODELS.read();
-    let model = models.get(model_name).ok_or_else(|| InferaError::ModelNotFound(model_name.to_string()))?;
-    let input_shape = model.input_shape.clone();
-    let output_shape = model.output_shape.clone();
-    let input_shape_len = input_shape.len();
-    let output_shape_len = output_shape.len();
-    let input_shape_ptr = Box::into_raw(input_shape.into_boxed_slice()) as *mut i64;
-    let output_shape_ptr = Box::into_raw(output_shape.into_boxed_slice()) as *mut i64;
-    Ok(ModelMetadata { input_shape: input_shape_ptr, input_shape_len, output_shape: output_shape_ptr, output_shape_len, input_count: 1, output_count: 1, })
+    let model = models
+        .get(model_name)
+        .ok_or_else(|| InferaError::ModelNotFound(model_name.to_string()))?;
+    let info = json!({
+        "name": model.name,
+        "input_shape": model.input_shape,
+        "output_shape": model.output_shape,
+        "input_count": 1,
+        "output_count": 1,
+    });
+    serde_json::to_string(&info).map_err(|e| InferaError::JsonError(e.to_string()))
 }
 
 #[cfg(not(feature = "tract"))]
-fn get_model_metadata_impl(_model_name: &str) -> Result<ModelMetadata, InferaError> {
-    Err(InferaError::FeatureNotEnabled("ONNX inference requires 'tract' feature to be enabled".to_string()))
+fn get_model_metadata_impl(_model_name: &str) -> Result<String, InferaError> {
+    Err(InferaError::FeatureNotEnabled(
+        "ONNX inference requires 'tract' feature to be enabled".to_string(),
+    ))
 }
 
 #[no_mangle]

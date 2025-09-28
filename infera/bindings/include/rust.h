@@ -19,15 +19,6 @@ typedef struct {
   int32_t status;
 } InferaInferenceResult;
 
-typedef struct {
-  int64_t *input_shape;
-  size_t input_shape_len;
-  int64_t *output_shape;
-  size_t output_shape_len;
-  size_t input_count;
-  size_t output_count;
-} ModelMetadata;
-
 // Basic functions
 void infera_free(char *ptr);
 const char *infera_last_error(void);
@@ -51,11 +42,10 @@ InferaInferenceResult infera_predict_blob(const char *model_name,
 // Utility functions
 char *infera_list_models(void);
 char *infera_model_info(const char *model_name);
-ModelMetadata infera_get_model_metadata(const char *model_name);
+char *infera_get_model_metadata(const char *model_name); // changed return type
 
 // Memory cleanup functions
 void infera_free_result(InferaInferenceResult result);
-void infera_free_metadata(ModelMetadata meta);
 
 #ifdef __cplusplus
 }

@@ -28,7 +28,6 @@ static std::string GetInferaError() {
   return err ? std::string(err) : std::string("unknown error");
 }
 
-// PRAGMA implementation (no return value)
 static void PragmaAutoloadDir(ClientContext &context, const FunctionParameters &parameters) {
   if (parameters.values.empty() || parameters.values[0].IsNull()) {
     return;
@@ -86,26 +85,19 @@ static void UnloadOnnxModel(DataChunk &args, ExpressionState &state, Vector &res
   std::string model_name_str = model_name.ToString();
   int rc = infera_unload_onnx_model(model_name_str.c_str());
   bool success = (rc == 0);
+  if (!success) {
+      throw InvalidInputException("Failed to unload ONNX model '" + model_name_str + "': " + GetInferaError());
+  }
   result.SetVectorType(VectorType::CONSTANT_VECTOR);
   ConstantVector::GetData<bool>(result)[0] = success;
   ConstantVector::SetNull(result, false);
 }
 
-static void OnnxPredict(DataChunk &args, ExpressionState &state, Vector &result) {
-  if (args.ColumnCount() < 2) {
-    throw InvalidInputException("onnx_predict(model_name, feature1, ...) requires at least 2 arguments");
-  }
-  if (args.size() == 0) { return; }
-  auto &model_name_vec = args.data[0];
-  auto model_name_val = model_name_vec.GetValue(0);
-  if (model_name_val.IsNull()) {
-    throw InvalidInputException("Model name cannot be NULL");
-  }
-  std::string model_name_str = model_name_val.ToString();
+static void ExtractFeatures(DataChunk &args, std::vector<float> &features) {
   const idx_t batch_size = args.size();
   const idx_t feature_count = args.ColumnCount() - 1;
-  std::vector<float> features;
   features.reserve(batch_size * feature_count);
+
   for (idx_t row_idx = 0; row_idx < batch_size; ++row_idx) {
     for (idx_t col_idx = 1; col_idx <= feature_count; ++col_idx) {
       auto feature_val = args.data[col_idx].GetValue(row_idx);
@@ -123,6 +115,25 @@ static void OnnxPredict(DataChunk &args, ExpressionState &state, Vector &result)
       features.push_back(feature_float);
     }
   }
+}
+
+static void OnnxPredict(DataChunk &args, ExpressionState &state, Vector &result) {
+  if (args.ColumnCount() < 2) {
+    throw InvalidInputException("onnx_predict(model_name, feature1, ...) requires at least 2 arguments");
+  }
+  if (args.size() == 0) { return; }
+  auto &model_name_vec = args.data[0];
+  auto model_name_val = model_name_vec.GetValue(0);
+  if (model_name_val.IsNull()) {
+    throw InvalidInputException("Model name cannot be NULL");
+  }
+  std::string model_name_str = model_name_val.ToString();
+  const idx_t batch_size = args.size();
+  const idx_t feature_count = args.ColumnCount() - 1;
+
+  std::vector<float> features;
+  ExtractFeatures(args, features);
+
   InferaInferenceResult res = infera_run_inference(model_name_str.c_str(), features.data(), batch_size, feature_count);
   if (res.status != 0) {
     throw InvalidInputException("Inference failed for model '" + model_name_str + "': " + GetInferaError());
@@ -211,25 +222,10 @@ static void OnnxPredictMulti(DataChunk &args, ExpressionState &state, Vector &re
   std::string model_name_str = model_name_val.ToString();
   const idx_t batch_size = args.size();
   const idx_t feature_count = args.ColumnCount() - 1;
+
   std::vector<float> features;
-  features.reserve(batch_size * feature_count);
-  for (idx_t row_idx = 0; row_idx < batch_size; ++row_idx) {
-    for (idx_t col_idx = 1; col_idx <= feature_count; ++col_idx) {
-      auto feature_val = args.data[col_idx].GetValue(row_idx);
-      if (feature_val.IsNull()) {
-        throw InvalidInputException("Feature values cannot be NULL");
-      }
-      float feature_float;
-      switch (feature_val.type().id()) {
-      case LogicalTypeId::FLOAT: feature_float = feature_val.GetValue<float>(); break;
-      case LogicalTypeId::DOUBLE: feature_float = static_cast<float>(feature_val.GetValue<double>()); break;
-      case LogicalTypeId::INTEGER: feature_float = static_cast<float>(feature_val.GetValue<int32_t>()); break;
-      case LogicalTypeId::BIGINT: feature_float = static_cast<float>(feature_val.GetValue<int64_t>()); break;
-      default: throw InvalidInputException("Unsupported feature type: " + feature_val.type().ToString());
-      }
-      features.push_back(feature_float);
-    }
-  }
+  ExtractFeatures(args, features);
+
   InferaInferenceResult res = infera_run_inference(model_name_str.c_str(), features.data(), batch_size, feature_count);
   if (res.status != 0) {
     infera_free_result(res);
@@ -265,32 +261,12 @@ static void ModelMetadataFunc(DataChunk &args, ExpressionState &state, Vector &r
     throw InvalidInputException("Model name cannot be NULL");
   }
   std::string model_name_str = model_name.ToString();
-  ModelMetadata meta = infera_get_model_metadata(model_name_str.c_str());
-  std::string json;
-  if (meta.input_shape_len == 0 && meta.output_shape_len == 0) {
-    json = std::string("{\"error\": \"") + GetInferaError() + "\"}";
-  } else {
-    json = "{";
-    json += "\"name\":\"" + model_name_str + "\",";
-    json += "\"input_shape\":[";
-    for (size_t i = 0; i < meta.input_shape_len; i++) {
-      if (i > 0) json += ",";
-      json += std::to_string(meta.input_shape[i]);
-    }
-    json += "],\"output_shape\":[";
-    for (size_t i = 0; i < meta.output_shape_len; i++) {
-      if (i > 0) json += ",";
-      json += std::to_string(meta.output_shape[i]);
-    }
-    json += "],";
-    json += "\"input_count\":" + std::to_string(meta.input_count) + ",";
-    json += "\"output_count\":" + std::to_string(meta.output_count);
-    json += "}";
-  }
-  infera_free_metadata(meta);
+  char *json_meta = infera_get_model_metadata(model_name_str.c_str());
+
   result.SetVectorType(VectorType::CONSTANT_VECTOR);
-  ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, json);
+  ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, json_meta);
   ConstantVector::SetNull(result, false);
+  infera_free(json_meta);
 }
 
 static void LoadInternal(ExtensionLoader &loader) {
@@ -300,27 +276,18 @@ static void LoadInternal(ExtensionLoader &loader) {
   ScalarFunction unload_onnx_model_func("unload_onnx_model", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, UnloadOnnxModel);
   loader.RegisterFunction(unload_onnx_model_func);
 
-  ScalarFunctionSet onnx_predict_set("onnx_predict");
-  for (idx_t param_count = 2; param_count <= 10; param_count++) {
-    vector<LogicalType> arguments;
-    arguments.push_back(LogicalType::VARCHAR);
-    for (idx_t i = 1; i < param_count; i++) {
-      arguments.push_back(LogicalType::FLOAT);
+  // Removed deprecated LogicalType::VARARG usage. Register multiple arities instead.
+  const idx_t MAX_FEATURES = 63; // features (total args = 1 + features)
+  for (idx_t feature_count = 1; feature_count <= MAX_FEATURES; feature_count++) {
+    vector<LogicalType> arg_types;
+    arg_types.reserve(feature_count + 1);
+    arg_types.push_back(LogicalType::VARCHAR); // model name
+    for (idx_t i = 0; i < feature_count; i++) {
+      arg_types.push_back(LogicalType::FLOAT); // DuckDB will auto-cast other numerics
     }
-    onnx_predict_set.AddFunction(ScalarFunction(arguments, LogicalType::FLOAT, OnnxPredict));
+    loader.RegisterFunction(ScalarFunction("onnx_predict", arg_types, LogicalType::FLOAT, OnnxPredict));
+    loader.RegisterFunction(ScalarFunction("onnx_predict_multi", arg_types, LogicalType::VARCHAR, OnnxPredictMulti));
   }
-  loader.RegisterFunction(onnx_predict_set);
-
-  ScalarFunctionSet onnx_predict_multi_set("onnx_predict_multi");
-  for (idx_t param_count = 2; param_count <= 10; param_count++) {
-    vector<LogicalType> arguments;
-    arguments.push_back(LogicalType::VARCHAR);
-    for (idx_t i = 1; i < param_count; i++) {
-      arguments.push_back(LogicalType::FLOAT);
-    }
-    onnx_predict_multi_set.AddFunction(ScalarFunction(arguments, LogicalType::VARCHAR, OnnxPredictMulti));
-  }
-  loader.RegisterFunction(onnx_predict_multi_set);
 
   ScalarFunction infera_predict_blob_func("infera_predict_blob", {LogicalType::VARCHAR, LogicalType::BLOB}, LogicalType::LIST(LogicalType::FLOAT), InferaPredictBlob);
   loader.RegisterFunction(infera_predict_blob_func);
@@ -337,7 +304,6 @@ static void LoadInternal(ExtensionLoader &loader) {
   ScalarFunction infera_version_func("infera_version", {}, LogicalType::VARCHAR, InferaVersion);
   loader.RegisterFunction(infera_version_func);
 
-  // Register PRAGMA via static factory (no return value)
   auto autoload_pragma = PragmaFunction::PragmaCall("infera_autoload_dir", PragmaAutoloadDir,
                                                     {LogicalType::VARCHAR}, LogicalType::INVALID);
   loader.RegisterFunction(autoload_pragma);
