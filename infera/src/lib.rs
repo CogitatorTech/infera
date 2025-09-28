@@ -1,6 +1,10 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 use std::cell::RefCell;
+use std::env;
 use std::ffi::{c_char, CStr, CString};
+use std::fs::{self, File};
+use std::io;
+use std::path::PathBuf;
 
 // Model management and inference
 use once_cell::sync::Lazy;
@@ -8,6 +12,10 @@ use parking_lot::RwLock;
 use serde_json;
 use std::collections::HashMap;
 use thiserror::Error;
+
+// Imports for URL handling
+use hex;
+use sha2::{Digest, Sha256};
 
 #[cfg(feature = "tract")]
 use tract_onnx::prelude::*;
@@ -32,6 +40,10 @@ pub enum InferaError {
     JsonError(String),
     #[error("Feature not enabled: {0}")]
     FeatureNotEnabled(String),
+    #[error("HTTP request failed: {0}")]
+    HttpRequestError(String),
+    #[error("Failed to create cache directory: {0}")]
+    CacheDirError(String),
 }
 
 // Thread-local storage for the last error message.
@@ -50,13 +62,49 @@ fn set_last_error(err: &InferaError) {
 }
 
 /// Retrieves the last error message for the current thread.
-/// The returned pointer is valid until the next error occurs on the same thread.
 #[no_mangle]
 pub extern "C" fn infera_last_error() -> *const c_char {
     LAST_ERROR.with(|cell| match *cell.borrow() {
         Some(ref c_string) => c_string.as_ptr(),
         None => std::ptr::null(),
     })
+}
+
+/// Downloads a model from a URL and caches it locally.
+/// Returns the local path to the cached model.
+fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
+    let cache_dir = env::temp_dir().join("infera_cache");
+    if !cache_dir.exists() {
+        fs::create_dir_all(&cache_dir)
+            .map_err(|e| InferaError::CacheDirError(e.to_string()))?;
+    }
+
+    // Create a unique filename by hashing the URL
+    let mut hasher = Sha256::new();
+    hasher.update(url.as_bytes());
+    let result = hasher.finalize();
+    let hash_hex = hex::encode(result);
+    let model_filename = format!("{}.onnx", hash_hex);
+    let cached_path = cache_dir.join(model_filename);
+
+    // If the model is already cached, return the path
+    if cached_path.exists() {
+        return Ok(cached_path);
+    }
+
+    // Download the model efficiently by streaming to a file
+    let mut response = reqwest::blocking::get(url)
+        .map_err(|e| InferaError::HttpRequestError(e.to_string()))?
+        .error_for_status() // Ensure we got a 2xx status code
+        .map_err(|e| InferaError::HttpRequestError(e.to_string()))?;
+
+    let mut temp_file = File::create(&cached_path)
+        .map_err(|e| InferaError::IoError(e.to_string()))?;
+
+    io::copy(&mut response, &mut temp_file)
+        .map_err(|e| InferaError::IoError(e.to_string()))?;
+
+    Ok(cached_path)
 }
 
 #[cfg(feature = "tract")]
@@ -133,11 +181,24 @@ pub extern "C" fn infera_load_onnx_model(name: *const c_char, path: *const c_cha
         let name_str = unsafe { CStr::from_ptr(name) }
             .to_str()
             .map_err(|_| InferaError::Utf8Error)?;
-        let path_str = unsafe { CStr::from_ptr(path) }
+        let path_or_url_str = unsafe { CStr::from_ptr(path) }
             .to_str()
             .map_err(|_| InferaError::Utf8Error)?;
 
-        load_model_impl(name_str, path_str)
+        // Check if the path is a URL. If so, download and cache it.
+        // Otherwise, use it as a local file path.
+        let local_path: PathBuf = if path_or_url_str.starts_with("http://")
+            || path_or_url_str.starts_with("https://")
+        {
+            handle_remote_model(path_or_url_str)?
+        } else {
+            PathBuf::from(path_or_url_str)
+        };
+
+        // We must have a valid local path string to pass to the ONNX library.
+        let local_path_str = local_path.to_str().ok_or(InferaError::Utf8Error)?;
+
+        load_model_impl(name_str, local_path_str)
     })();
 
     match result {
@@ -151,7 +212,6 @@ pub extern "C" fn infera_load_onnx_model(name: *const c_char, path: *const c_cha
 
 #[cfg(feature = "tract")]
 fn load_model_impl(name: &str, path: &str) -> Result<(), InferaError> {
-    // Load ONNX model using tract
     let model = tract_onnx::onnx()
         .model_for_path(path)
         .map_err(|e| InferaError::OnnxError(e.to_string()))?
@@ -160,7 +220,6 @@ fn load_model_impl(name: &str, path: &str) -> Result<(), InferaError> {
         .into_runnable()
         .map_err(|e| InferaError::OnnxError(e.to_string()))?;
 
-    // Get input/output shapes for validation
     let input_facts = model
         .model()
         .input_fact(0)
@@ -188,7 +247,6 @@ fn load_model_impl(name: &str, path: &str) -> Result<(), InferaError> {
         name: name.to_string(),
     };
 
-    // Put the model in thread-safe map
     let mut models = MODELS.write();
     models.insert(name.to_string(), onnx_model);
 
@@ -276,11 +334,9 @@ fn run_inference_impl(
         .get(model_name)
         .ok_or_else(|| InferaError::ModelNotFound(model_name.to_string()))?;
 
-    // Convert input data to an owned vector
     let input_data = unsafe { std::slice::from_raw_parts(data, rows * cols) };
     let input_vec = input_data.to_vec();
 
-    // Create Tract tensor directly from raw data using tensor construction
     let input_tensor = tract_onnx::prelude::Tensor::from_shape(&[rows, cols], &input_vec)
         .map_err(|e| InferaError::OnnxError(e.to_string()))?;
     let outputs = model
@@ -288,7 +344,6 @@ fn run_inference_impl(
         .run(tvec!(input_tensor.into()))
         .map_err(|e| InferaError::OnnxError(e.to_string()))?;
 
-    // Extract output data
     let output_tensor = outputs
         .into_iter()
         .next()
@@ -306,11 +361,9 @@ fn run_inference_impl(
         1
     };
 
-    // Copy output data to an owned vector
     let output_data: Vec<f32> = output_array.iter().cloned().collect();
     let output_len = output_data.len();
 
-    // Convert to raw pointer (caller must free this)
     let output_ptr = Box::into_raw(output_data.into_boxed_slice()) as *mut f32;
 
     Ok(InferaInferenceResult {
@@ -334,7 +387,6 @@ fn run_inference_impl(
     ))
 }
 
-// Model metadata functions
 #[no_mangle]
 pub extern "C" fn infera_get_model_metadata(model_name: *const c_char) -> ModelMetadata {
     let result = (|| -> Result<ModelMetadata, InferaError> {
@@ -372,14 +424,12 @@ fn get_model_metadata_impl(model_name: &str) -> Result<ModelMetadata, InferaErro
         .get(model_name)
         .ok_or_else(|| InferaError::ModelNotFound(model_name.to_string()))?;
 
-    // Clone the shape vectors to transfer ownership
     let input_shape = model.input_shape.clone();
     let output_shape = model.output_shape.clone();
 
     let input_shape_len = input_shape.len();
     let output_shape_len = output_shape.len();
 
-    // Convert to raw pointers (caller must free these)
     let input_shape_ptr = Box::into_raw(input_shape.into_boxed_slice()) as *mut i64;
     let output_shape_ptr = Box::into_raw(output_shape.into_boxed_slice()) as *mut i64;
 
@@ -388,8 +438,8 @@ fn get_model_metadata_impl(model_name: &str) -> Result<ModelMetadata, InferaErro
         input_shape_len,
         output_shape: output_shape_ptr,
         output_shape_len,
-        input_count: 1,  // Assuming single input for now
-        output_count: 1, // Assuming single output for now
+        input_count: 1,
+        output_count: 1,
     })
 }
 
@@ -400,7 +450,6 @@ fn get_model_metadata_impl(_model_name: &str) -> Result<ModelMetadata, InferaErr
     ))
 }
 
-// List all loaded models
 #[no_mangle]
 pub extern "C" fn infera_list_models() -> *mut c_char {
     let models = MODELS.read();
@@ -409,7 +458,6 @@ pub extern "C" fn infera_list_models() -> *mut c_char {
     CString::new(joined).unwrap().into_raw()
 }
 
-// Get detailed model information as JSON
 #[no_mangle]
 pub extern "C" fn infera_model_info(model_name: *const c_char) -> *mut c_char {
     let result = (|| -> Result<String, InferaError> {
