@@ -1,0 +1,63 @@
+# `cbindgen` configuration for infera crate
+language = "C"
+header = "/* Generated with cbindgen */\n/* DO NOT EDIT */\n"
+trailer = "/* End of generated bindings */"
+include_version = true
+namespace = "infera"
+cpp_compat = true
+
+# Output settings
+tab_width = 4
+line_length = 100
+braces = "SameLine"
+include_guard = "INFERA_H"
+pragma_once = true
+
+# Documentation settings
+documentation = true
+documentation_style = "doxy"
+
+# Structure settings
+[struct]
+must_use = "MUST_USE_STRUCT"
+
+# Enum settings
+[enum]
+must_use = "MUST_USE_ENUM"
+
+# Function settings
+[fn]
+must_use = "MUST_USE_FUNC"
+prefix = ""
+
+# Export settings
+[export]
+include = [
+    "infera_load_onnx_model",
+    "infera_unload_onnx_model",
+    "infera_run_inference",
+    "infera_get_model_metadata",
+    "infera_list_models",
+    "infera_last_error",
+    "infera_free",
+    "infera_free_result",
+    "infera_free_metadata",
+    "InferaInferenceResult",
+    "ModelMetadata"
+]
+
+# Type mappings
+[parse]
+parse_deps = false
+clean = false
+
+# Macro settings
+[macro_expansion]
+bitflags = true
+
+# Define settings
+[defines]
+"target_os = linux" = "INFERA_LINUX"
+"target_os = windows" = "INFERA_WINDOWS"
+"target_os = macos" = "INFERA_MACOS"
+"feature = tract" = "INFERA_TRACT_ENABLED"

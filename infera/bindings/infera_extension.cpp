@@ -401,9 +401,6 @@ void InferaExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }
 
 std::string InferaExtension::Name() { return "infera"; }
 std::string InferaExtension::Version() const { return "v0.1.0"; }
-//std::string InferaExtension::Description() const {
-//  return "Infera extension allows running ML models on data stored in DuckDB";
-//}
 
 } // namespace duckdb
 

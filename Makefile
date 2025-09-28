@@ -68,6 +68,12 @@ rust-clean: ## Clean Rust build artifacts
 	@echo "Cleaning Rust build artifacts..."
 	@cd infera && cargo clean
 
+.PHONY: create-bindings
+create-bindings: ## Generate C bindings from Rust code
+	@echo "Generating C bindings for Infera..."
+	@cd infera && cbindgen --config cbindgen.toml --crate infera --output bindings/include/_rust.h
+	@echo "C bindings generated at infera/bindings/include/_rust.h"
+
 # ==============================================================================
 # Targets for Building the Extension
 # ==============================================================================

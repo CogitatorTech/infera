@@ -1,5 +1,5 @@
 #![allow(unsafe_op_in_unsafe_fn)]
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{CStr, CString, c_char};
 use std::sync::atomic::{AtomicPtr, Ordering};
 
 // Model management and inference
@@ -55,7 +55,7 @@ struct OnnxModel {
 
 static MODELS: Lazy<RwLock<HashMap<String, OnnxModel>>> = Lazy::new(|| RwLock::new(HashMap::new()));
 
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub unsafe extern "C" fn infera_free(ptr: *mut c_char) {
     if ptr.is_null() {
         return;
@@ -63,7 +63,7 @@ pub unsafe extern "C" fn infera_free(ptr: *mut c_char) {
     let _ = CString::from_raw(ptr);
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn infera_last_error() -> *const c_char {
     let guard = LAST_ERROR.read();
     static LAST_ERROR_CSTR: AtomicPtr<c_char> = AtomicPtr::new(std::ptr::null_mut());
@@ -89,7 +89,7 @@ pub struct InferaInferenceResult {
     pub status: i32,
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub unsafe extern "C" fn infera_free_result(res: InferaInferenceResult) {
     if !res.data.is_null() && res.len > 0 {
         let _ = Vec::from_raw_parts(res.data, res.len, res.len);
@@ -106,7 +106,7 @@ pub struct ModelMetadata {
     pub output_count: usize,
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub unsafe extern "C" fn infera_free_metadata(meta: ModelMetadata) {
     if !meta.input_shape.is_null() && meta.input_shape_len > 0 {
         let _ = Vec::from_raw_parts(meta.input_shape, meta.input_shape_len, meta.input_shape_len);
@@ -121,7 +121,7 @@ pub unsafe extern "C" fn infera_free_metadata(meta: ModelMetadata) {
 }
 
 // Core model management functions
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn infera_load_onnx_model(name: *const c_char, path: *const c_char) -> i32 {
     let result = (|| -> Result<(), InferaError> {
         if name.is_null() || path.is_null() {
@@ -200,7 +200,7 @@ fn load_model_impl(name: &str, _path: &str) -> Result<(), InferaError> {
     ))
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn infera_unload_onnx_model(name: *const c_char) -> i32 {
     let result = (|| -> Result<(), InferaError> {
         if name.is_null() {
@@ -228,7 +228,7 @@ pub extern "C" fn infera_unload_onnx_model(name: *const c_char) -> i32 {
     }
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn infera_run_inference(
     model_name: *const c_char,
     data: *const f32,
@@ -333,7 +333,7 @@ fn run_inference_impl(
 }
 
 // Model metadata functions
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn infera_get_model_metadata(model_name: *const c_char) -> ModelMetadata {
     let result = (|| -> Result<ModelMetadata, InferaError> {
         if model_name.is_null() {
@@ -399,29 +399,16 @@ fn get_model_metadata_impl(_model_name: &str) -> Result<ModelMetadata, InferaErr
 }
 
 // List all loaded models
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn infera_list_models() -> *mut c_char {
-    let result = (|| -> Result<String, InferaError> {
-        let models = MODELS.read();
-        let model_names: Vec<&String> = models.keys().collect();
-        serde_json::to_string(&model_names).map_err(|e| InferaError::JsonError(e.to_string()))
-    })();
-
-    match result {
-        Ok(json) => {
-            let s = CString::new(json).unwrap_or_else(|_| CString::new("[]").unwrap());
-            s.into_raw()
-        }
-        Err(e) => {
-            set_last_error(&e);
-            let s = CString::new("[]").unwrap();
-            s.into_raw()
-        }
-    }
+    let models = MODELS.read();
+    let list: Vec<String> = models.keys().cloned().collect();
+    let joined = serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string());
+    CString::new(joined).unwrap().into_raw()
 }
 
 // Get detailed model information as JSON
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn infera_model_info(model_name: *const c_char) -> *mut c_char {
     let result = (|| -> Result<String, InferaError> {
         if model_name.is_null() {

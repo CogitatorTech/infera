@@ -88,11 +88,8 @@ build
 cmake-build-debug
 duckdb_unittest_tempdir/
 test/python/__pycache__/
-.Rhistory
-testext
-#uv.lock
 target/
 *_output.txt
 standalone-build/
-#rust.h
+_rust.h
 uv.lock

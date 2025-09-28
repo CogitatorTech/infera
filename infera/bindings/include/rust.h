@@ -1,3 +1,6 @@
+#ifndef INFERA_H
+#define INFERA_H
+
 #pragma once
 
 #include <stddef.h>
@@ -49,4 +52,6 @@ void infera_free_metadata(ModelMetadata meta);
 
 #ifdef __cplusplus
 }
-#endif
+#endif // __cplusplus
+
+#endif /* INFERA_H */
