@@ -33,14 +33,14 @@ prefix = ""
 # Export settings
 [export]
 include = [
-    "infera_autoload_dir",
-    "infera_version",
-    "infera_load_onnx_model",
-    "infera_unload_onnx_model",
-    "infera_run_inference",
-    "infera_predict_blob",
-    "infera_get_model_metadata",
-    "infera_list_models",
+    "infera_set_autoload_dir",
+    "infera_get_version",
+    "infera_load_model",
+    "infera_unload_model",
+    "infera_predict",
+    "infera_predict_from_blob",
+    "infera_get_model_info",
+    "infera_get_loaded_models",
     "infera_last_error",
     "infera_free",
     "infera_free_result",

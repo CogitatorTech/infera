@@ -3,21 +3,21 @@
 LOAD infera;
 
 -- Load sample model
-SELECT load_onnx_model('linear', 'tests/models/linear.onnx') AS loaded;
+SELECT infera_load_model('linear', 'tests/models/linear.onnx') AS loaded;
 
 -- Verify model appears in list
-SELECT list_models() AS after_load;
+SELECT infera_get_loaded_models() AS after_load;
 
 -- Retrieve metadata and validate it contains expected input shape
-SELECT model_metadata('linear') AS metadata;
-SELECT position('"input_shape":[1,3]' IN model_metadata('linear')) > 0 AS metadata_has_input_shape;
+SELECT infera_get_model_info('linear') AS metadata;
+SELECT position('"input_shape":[1,3]' IN infera_get_model_info('linear')) > 0 AS metadata_has_input_shape;
 
 -- Run deterministic prediction; model implements: y = 2*x1 -1*x2 + 0.5*x3 + 0.25
 -- Using features (1.0, 2.0, 3.0) expected y = 1.75
-SELECT onnx_predict('linear', 1.0, 2.0, 3.0) AS prediction;
-SELECT abs(onnx_predict('linear', 1.0, 2.0, 3.0) - 1.75) < 1e-5 AS correct_prediction;
+SELECT infera_predict('linear', 1.0, 2.0, 3.0) AS prediction;
+SELECT abs(infera_predict('linear', 1.0, 2.0, 3.0) - 1.75) < 1e-5 AS correct_prediction;
 
 -- Unload model and confirm removal
-SELECT unload_onnx_model('linear') AS unloaded;
-SELECT list_models() AS after_unload;
+SELECT infera_unload_model('linear') AS unloaded;
+SELECT infera_get_loaded_models() AS after_unload;
 .echo off

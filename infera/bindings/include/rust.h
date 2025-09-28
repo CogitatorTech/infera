@@ -24,25 +24,23 @@ void infera_free(char *ptr);
 const char *infera_last_error(void);
 
 // Version and autoload functions
-char *infera_version(void);
-char *infera_autoload_dir(const char *path);
+char *infera_get_version(void);
+char *infera_set_autoload_dir(const char *path);
 
 // Model management functions
-int32_t infera_load_onnx_model(const char *name, const char *path);
-int32_t infera_unload_onnx_model(const char *name);
+int32_t infera_load_model(const char *name, const char *path);
+int32_t infera_unload_model(const char *name);
 
 // Inference functions
-InferaInferenceResult infera_run_inference(const char *model_name,
-                                           const float *data, size_t rows,
-                                           size_t cols);
-InferaInferenceResult infera_predict_blob(const char *model_name,
-                                          const uint8_t *blob_data,
-                                          size_t blob_len);
+InferaInferenceResult infera_predict(const char *model_name, const float *data,
+                                     size_t rows, size_t cols);
+InferaInferenceResult infera_predict_from_blob(const char *model_name,
+                                               const uint8_t *blob_data,
+                                               size_t blob_len);
 
 // Utility functions
-char *infera_list_models(void);
-char *infera_model_info(const char *model_name);
-char *infera_get_model_metadata(const char *model_name); // changed return type
+char *infera_get_loaded_models(void);
+char *infera_get_model_info(const char *model_name);
 
 // Memory cleanup functions
 void infera_free_result(InferaInferenceResult result);

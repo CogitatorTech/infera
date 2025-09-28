@@ -134,7 +134,7 @@ pub unsafe extern "C" fn infera_free_result(res: InferaInferenceResult) {
 }
 
 #[no_mangle]
-pub extern "C" fn infera_load_onnx_model(name: *const c_char, path: *const c_char) -> i32 {
+pub extern "C" fn infera_load_model(name: *const c_char, path: *const c_char) -> i32 {
     let result = (|| -> Result<(), InferaError> {
         if name.is_null() || path.is_null() { return Err(InferaError::NullPointer); }
         let name_str = unsafe { CStr::from_ptr(name) }.to_str().map_err(|_| InferaError::Utf8Error)?;
@@ -178,7 +178,7 @@ fn load_model_impl(name: &str, _path: &str) -> Result<(), InferaError> {
 }
 
 #[no_mangle]
-pub extern "C" fn infera_unload_onnx_model(name: *const c_char) -> i32 {
+pub extern "C" fn infera_unload_model(name: *const c_char) -> i32 {
     let result = (|| -> Result<(), InferaError> {
         if name.is_null() { return Err(InferaError::NullPointer); }
         let name_str = unsafe { CStr::from_ptr(name) }.to_str().map_err(|_| InferaError::Utf8Error)?;
@@ -191,7 +191,7 @@ pub extern "C" fn infera_unload_onnx_model(name: *const c_char) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn infera_run_inference(model_name: *const c_char, data: *const f32, rows: usize, cols: usize) -> InferaInferenceResult {
+pub extern "C" fn infera_predict(model_name: *const c_char, data: *const f32, rows: usize, cols: usize) -> InferaInferenceResult {
     let result = (|| -> Result<InferaInferenceResult, InferaError> {
         if model_name.is_null() || data.is_null() { return Err(InferaError::NullPointer); }
         let name_str = unsafe { CStr::from_ptr(model_name) }.to_str().map_err(|_| InferaError::Utf8Error)?;
@@ -230,7 +230,7 @@ fn run_inference_impl(_model_name: &str, _data: *const f32, _rows: usize, _cols:
 }
 
 #[no_mangle]
-pub extern "C" fn infera_predict_blob(model_name: *const c_char, blob_data: *const u8, blob_len: usize) -> InferaInferenceResult {
+pub extern "C" fn infera_predict_from_blob(model_name: *const c_char, blob_data: *const u8, blob_len: usize) -> InferaInferenceResult {
     let result = (|| -> Result<InferaInferenceResult, InferaError> {
         if model_name.is_null() || blob_data.is_null() { return Err(InferaError::NullPointer); }
         let name_str = unsafe { CStr::from_ptr(model_name) }.to_str().map_err(|_| InferaError::Utf8Error)?;
@@ -277,7 +277,7 @@ fn run_inference_blob_impl(_model_name: &str, _blob_data: *const u8, _blob_len: 
 }
 
 #[no_mangle]
-pub extern "C" fn infera_get_model_metadata(model_name: *const c_char) -> *mut c_char {
+pub extern "C" fn infera_get_model_info(model_name: *const c_char) -> *mut c_char {
     let result = (|| -> Result<String, InferaError> {
         if model_name.is_null() { return Err(InferaError::NullPointer); }
         let name_str = unsafe { CStr::from_ptr(model_name) }.to_str().map_err(|_| InferaError::Utf8Error)?;
@@ -303,8 +303,7 @@ fn get_model_metadata_impl(model_name: &str) -> Result<String, InferaError> {
         "name": model.name,
         "input_shape": model.input_shape,
         "output_shape": model.output_shape,
-        "input_count": 1,
-        "output_count": 1,
+        "loaded": true
     });
     serde_json::to_string(&info).map_err(|e| InferaError::JsonError(e.to_string()))
 }
@@ -317,7 +316,7 @@ fn get_model_metadata_impl(_model_name: &str) -> Result<String, InferaError> {
 }
 
 #[no_mangle]
-pub extern "C" fn infera_list_models() -> *mut c_char {
+pub extern "C" fn infera_get_loaded_models() -> *mut c_char {
     let models = MODELS.read();
     let list: Vec<String> = models.keys().cloned().collect();
     let joined = serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string());
@@ -325,44 +324,7 @@ pub extern "C" fn infera_list_models() -> *mut c_char {
 }
 
 #[no_mangle]
-pub extern "C" fn infera_model_info(model_name: *const c_char) -> *mut c_char {
-    let result = (|| -> Result<String, InferaError> {
-        if model_name.is_null() { return Err(InferaError::NullPointer); }
-        let name_str = unsafe { CStr::from_ptr(model_name) }.to_str().map_err(|_| InferaError::Utf8Error)?;
-        get_model_info_impl(name_str)
-    })();
-    match result {
-        Ok(json) => {
-            CString::new(json).unwrap_or_else(|_| CString::new("{}").unwrap()).into_raw()
-        }
-        Err(e) => {
-            set_last_error(&e);
-            let error_json = format!("{{\"error\": \"{}\"}}", e);
-            CString::new(error_json).unwrap_or_else(|_| CString::new("{}").unwrap()).into_raw()
-        }
-    }
-}
-
-#[cfg(feature = "tract")]
-fn get_model_info_impl(model_name: &str) -> Result<String, InferaError> {
-    let models = MODELS.read();
-    let model = models.get(model_name).ok_or_else(|| InferaError::ModelNotFound(model_name.to_string()))?;
-    let info = json!({
-        "name": model.name,
-        "input_shape": model.input_shape,
-        "output_shape": model.output_shape,
-        "loaded": true
-    });
-    serde_json::to_string(&info).map_err(|e| InferaError::JsonError(e.to_string()))
-}
-
-#[cfg(not(feature = "tract"))]
-fn get_model_info_impl(_model_name: &str) -> Result<String, InferaError> {
-    Err(InferaError::FeatureNotEnabled("ONNX inference requires 'tract' feature to be enabled".to_string()))
-}
-
-#[no_mangle]
-pub extern "C" fn infera_version() -> *mut c_char {
+pub extern "C" fn infera_get_version() -> *mut c_char {
     let cache_dir = env::temp_dir().join("infera_cache");
     let info = json!({
         "version": env!("CARGO_PKG_VERSION"),
@@ -374,7 +336,7 @@ pub extern "C" fn infera_version() -> *mut c_char {
 }
 
 #[no_mangle]
-pub extern "C" fn infera_autoload_dir(path: *const c_char) -> *mut c_char {
+pub extern "C" fn infera_set_autoload_dir(path: *const c_char) -> *mut c_char {
     let result = (|| -> Result<Value, InferaError> {
         if path.is_null() { return Err(InferaError::NullPointer); }
         let path_str = unsafe { CStr::from_ptr(path) }.to_str().map_err(|_| InferaError::Utf8Error)?;
