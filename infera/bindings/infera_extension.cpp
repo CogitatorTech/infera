@@ -2,6 +2,7 @@
 
 #include "infera_extension.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/types/vector.hpp"
@@ -23,7 +24,7 @@ namespace duckdb {
 static std::string GetInferaError() {
   const char *err = infera_last_error();
   return err ? std::string(err)
-             : std::string("unknown error"); // This should never happen
+             : std::string("unknown error"); // Should not happen
 }
 
 // Model loading function
@@ -38,10 +39,10 @@ static void LoadOnnxModel(DataChunk &args, ExpressionState &state,
   auto &path_vec = args.data[1];
 
   if (args.size() == 0) {
-    throw InvalidInputException("load_onnx_model requires at least one row");
+    return;
   }
 
-  // Process first row only (model name and path should be same for all rows)
+  // Process first row only
   auto model_name = model_name_vec.GetValue(0);
   auto path = path_vec.GetValue(0);
 
@@ -64,12 +65,9 @@ static void LoadOnnxModel(DataChunk &args, ExpressionState &state,
                                 "': " + GetInferaError());
   }
 
-  // Return success status for all rows (even if only one failed)
-  result.SetVectorType(VectorType::FLAT_VECTOR);
-  auto result_data = FlatVector::GetData<bool>(result);
-  for (idx_t i = 0; i < args.size(); i++) {
-    result_data[i] = success;
-  }
+  result.SetVectorType(VectorType::CONSTANT_VECTOR);
+  ConstantVector::GetData<bool>(result)[0] = success;
+  ConstantVector::SetNull(result, false);
 }
 
 // Model unloading function
@@ -82,7 +80,7 @@ static void UnloadOnnxModel(DataChunk &args, ExpressionState &state,
 
   auto &model_name_vec = args.data[0];
   if (args.size() == 0) {
-    throw InvalidInputException("unload_onnx_model requires at least one row");
+    return;
   }
 
   auto model_name = model_name_vec.GetValue(0);
@@ -94,14 +92,12 @@ static void UnloadOnnxModel(DataChunk &args, ExpressionState &state,
   int rc = infera_unload_onnx_model(model_name_str.c_str());
   bool success = (rc == 0);
 
-  result.SetVectorType(VectorType::FLAT_VECTOR);
-  auto result_data = FlatVector::GetData<bool>(result);
-  for (idx_t i = 0; i < args.size(); i++) {
-    result_data[i] = success;
-  }
+  result.SetVectorType(VectorType::CONSTANT_VECTOR);
+  ConstantVector::GetData<bool>(result)[0] = success;
+  ConstantVector::SetNull(result, false);
 }
 
-// ONNX prediction function with variable number of arguments
+// Single-output ONNX prediction function using batching
 static void OnnxPredict(DataChunk &args, ExpressionState &state,
                         Vector &result) {
   if (args.ColumnCount() < 2) {
@@ -109,31 +105,30 @@ static void OnnxPredict(DataChunk &args, ExpressionState &state,
                                 "requires at least 2 arguments");
   }
 
+  if (args.size() == 0) {
+    return;
+  }
+
   auto &model_name_vec = args.data[0];
+  auto model_name_val = model_name_vec.GetValue(0);
+  if (model_name_val.IsNull()) {
+    throw InvalidInputException("Model name cannot be NULL");
+  }
+  std::string model_name_str = model_name_val.ToString();
 
-  result.SetVectorType(VectorType::FLAT_VECTOR);
-  auto result_data = FlatVector::GetData<float>(result);
+  // Collect all features for the batch
+  const idx_t batch_size = args.size();
+  const idx_t feature_count = args.ColumnCount() - 1;
+  std::vector<float> features;
+  features.reserve(batch_size * feature_count);
 
-  for (idx_t row_idx = 0; row_idx < args.size(); row_idx++) {
-    auto model_name = model_name_vec.GetValue(row_idx);
-
-    if (model_name.IsNull()) {
-      throw InvalidInputException("Model name cannot be NULL");
-    }
-
-    std::string model_name_str = model_name.ToString();
-
-    // Collect feature values
-    std::vector<float> features;
-    features.reserve(args.ColumnCount() - 1);
-
-    for (idx_t col_idx = 1; col_idx < args.ColumnCount(); col_idx++) {
+  for (idx_t row_idx = 0; row_idx < batch_size; ++row_idx) {
+    for (idx_t col_idx = 1; col_idx <= feature_count; ++col_idx) {
       auto feature_val = args.data[col_idx].GetValue(row_idx);
       if (feature_val.IsNull()) {
         throw InvalidInputException("Feature values cannot be NULL");
       }
 
-      // Convert to float based on type
       float feature_float;
       switch (feature_val.type().id()) {
       case LogicalTypeId::FLOAT:
@@ -154,36 +149,45 @@ static void OnnxPredict(DataChunk &args, ExpressionState &state,
       }
       features.push_back(feature_float);
     }
-
-    // Run inference
-    InferaInferenceResult inference_result =
-        infera_run_inference(model_name_str.c_str(), features.data(),
-                             1, // single row
-                             features.size());
-
-    if (inference_result.status != 0) {
-      throw InvalidInputException("Inference failed for model '" +
-                                  model_name_str + "': " + GetInferaError());
-    }
-
-    if (inference_result.len == 0 || inference_result.data == nullptr) {
-      throw InvalidInputException("No prediction returned from model '" +
-                                  model_name_str + "'");
-    }
-
-    // Take the first prediction value
-    result_data[row_idx] = inference_result.data[0];
-
-    // Clean up the result
-    infera_free_result(inference_result);
   }
+
+  // Run inference on the entire batch
+  InferaInferenceResult res = infera_run_inference(
+      model_name_str.c_str(), features.data(), batch_size, feature_count);
+
+  if (res.status != 0) {
+    throw InvalidInputException("Inference failed for model '" +
+                                model_name_str + "': " + GetInferaError());
+  }
+
+  // Validate result shape for this single-output function
+  if (res.rows != batch_size || res.cols != 1) {
+    std::string err_msg = StringUtil::Format(
+        "Model output shape mismatch. Expected (%d, 1), but got (%d, %d).",
+        batch_size, res.rows, res.cols);
+    infera_free_result(res);
+    throw InvalidInputException(err_msg);
+  }
+
+  // Populate the result vector
+  result.SetVectorType(VectorType::FLAT_VECTOR);
+  auto result_data = FlatVector::GetData<float>(result);
+  for (idx_t i = 0; i < batch_size; i++) {
+    result_data[i] = res.data[i];
+  }
+
+  infera_free_result(res);
 }
 
 // List all loaded models (returns a JSON array)
 static void ListModels(DataChunk &args, ExpressionState &state,
                        Vector &result) {
   char *models_json = infera_list_models();
-  result.SetValue(0, Value(models_json));
+
+  result.SetVectorType(VectorType::CONSTANT_VECTOR);
+  ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, models_json);
+  ConstantVector::SetNull(result, false);
+
   infera_free(models_json);
 }
 
@@ -196,7 +200,7 @@ static void ModelInfo(DataChunk &args, ExpressionState &state, Vector &result) {
 
   auto &model_name_vec = args.data[0];
   if (args.size() == 0) {
-    throw InvalidInputException("model_info requires at least one row");
+    return;
   }
 
   auto model_name = model_name_vec.GetValue(0);
@@ -207,7 +211,10 @@ static void ModelInfo(DataChunk &args, ExpressionState &state, Vector &result) {
   std::string model_name_str = model_name.ToString();
   char *info_json = infera_model_info(model_name_str.c_str());
 
-  result.SetValue(0, Value(info_json));
+  result.SetVectorType(VectorType::CONSTANT_VECTOR);
+  ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, info_json);
+  ConstantVector::SetNull(result, false);
+
   infera_free(info_json);
 }
 
@@ -219,25 +226,25 @@ static void OnnxPredictMulti(DataChunk &args, ExpressionState &state,
                                 "requires at least 2 arguments");
   }
 
+  if (args.size() == 0) {
+    return;
+  }
+
   auto &model_name_vec = args.data[0];
+  auto model_name_val = model_name_vec.GetValue(0);
+  if (model_name_val.IsNull()) {
+    throw InvalidInputException("Model name cannot be NULL");
+  }
+  std::string model_name_str = model_name_val.ToString();
 
-  result.SetVectorType(VectorType::FLAT_VECTOR);
-  auto result_data = FlatVector::GetData<string_t>(result);
+  // Collect all features for the batch
+  const idx_t batch_size = args.size();
+  const idx_t feature_count = args.ColumnCount() - 1;
+  std::vector<float> features;
+  features.reserve(batch_size * feature_count);
 
-  for (idx_t row_idx = 0; row_idx < args.size(); row_idx++) {
-    auto model_name = model_name_vec.GetValue(row_idx);
-
-    if (model_name.IsNull()) {
-      throw InvalidInputException("Model name cannot be NULL");
-    }
-
-    std::string model_name_str = model_name.ToString();
-
-    // Collect feature values
-    std::vector<float> features;
-    features.reserve(args.ColumnCount() - 1);
-
-    for (idx_t col_idx = 1; col_idx < args.ColumnCount(); col_idx++) {
+  for (idx_t row_idx = 0; row_idx < batch_size; ++row_idx) {
+    for (idx_t col_idx = 1; col_idx <= feature_count; ++col_idx) {
       auto feature_val = args.data[col_idx].GetValue(row_idx);
       if (feature_val.IsNull()) {
         throw InvalidInputException("Feature values cannot be NULL");
@@ -263,37 +270,44 @@ static void OnnxPredictMulti(DataChunk &args, ExpressionState &state,
       }
       features.push_back(feature_float);
     }
+  }
 
-    // Run inference
-    InferaInferenceResult inference_result =
-        infera_run_inference(model_name_str.c_str(), features.data(),
-                             1, // single row
-                             features.size());
+  // Run inference on the entire batch
+  InferaInferenceResult res = infera_run_inference(
+      model_name_str.c_str(), features.data(), batch_size, feature_count);
 
-    if (inference_result.status != 0) {
-      throw InvalidInputException("Inference failed for model '" +
-                                  model_name_str + "': " + GetInferaError());
-    }
+  if (res.status != 0) {
+    throw InvalidInputException("Inference failed for model '" +
+                                model_name_str + "': " + GetInferaError());
+  }
 
-    if (inference_result.len == 0 || inference_result.data == nullptr) {
-      throw InvalidInputException("No prediction returned from model '" +
-                                  model_name_str + "'");
-    }
+  // Validate result shape
+  if (res.rows != batch_size) {
+    std::string err_msg = StringUtil::Format(
+        "Model output row count mismatch. Expected %d, but got %d.",
+        batch_size, res.rows);
+    infera_free_result(res);
+    throw InvalidInputException(err_msg);
+  }
 
-    // Convert all outputs to JSON array
+  // Populate the result vector with JSON strings
+  result.SetVectorType(VectorType::FLAT_VECTOR);
+  auto result_data = FlatVector::GetData<string_t>(result);
+  const size_t output_cols = res.cols;
+
+  for (idx_t row_idx = 0; row_idx < batch_size; row_idx++) {
     std::string json_result = "[";
-    for (size_t i = 0; i < inference_result.len; i++) {
-      if (i > 0)
+    for (size_t col_idx = 0; col_idx < output_cols; col_idx++) {
+      if (col_idx > 0) {
         json_result += ",";
-      json_result += std::to_string(inference_result.data[i]);
+      }
+      json_result += std::to_string(res.data[row_idx * output_cols + col_idx]);
     }
     json_result += "]";
-
     result_data[row_idx] = StringVector::AddString(result, json_result);
-
-    // Clean up the result
-    infera_free_result(inference_result);
   }
+
+  infera_free_result(res);
 }
 
 // Model metadata function returning JSON
@@ -305,7 +319,7 @@ static void ModelMetadataFunc(DataChunk &args, ExpressionState &state,
   }
   auto &model_name_vec = args.data[0];
   if (args.size() == 0) {
-    throw InvalidInputException("model_metadata requires at least one row");
+    return;
   }
   auto model_name = model_name_vec.GetValue(0);
   if (model_name.IsNull()) {
@@ -341,7 +355,9 @@ static void ModelMetadataFunc(DataChunk &args, ExpressionState &state,
   }
   infera_free_metadata(meta);
 
-  result.SetValue(0, Value(json));
+  result.SetVectorType(VectorType::CONSTANT_VECTOR);
+  ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, json);
+  ConstantVector::SetNull(result, false);
 }
 
 // Internal function to register all functions

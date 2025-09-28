@@ -1,6 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn)]
-use std::ffi::{CStr, CString, c_char};
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::cell::RefCell;
+use std::ffi::{c_char, CStr, CString};
 
 // Model management and inference
 use once_cell::sync::Lazy;
@@ -34,10 +34,29 @@ pub enum InferaError {
     FeatureNotEnabled(String),
 }
 
-static LAST_ERROR: Lazy<RwLock<String>> = Lazy::new(|| RwLock::new(String::new()));
+// Thread-local storage for the last error message.
+thread_local! {
+    static LAST_ERROR: RefCell<Option<CString>> = RefCell::new(None);
+}
 
+/// Sets the last error message for the current thread.
 fn set_last_error(err: &InferaError) {
-    *LAST_ERROR.write() = err.to_string();
+    let err_msg = err.to_string();
+    if let Ok(c_string) = CString::new(err_msg) {
+        LAST_ERROR.with(|cell| {
+            *cell.borrow_mut() = Some(c_string);
+        });
+    }
+}
+
+/// Retrieves the last error message for the current thread.
+/// The returned pointer is valid until the next error occurs on the same thread.
+#[no_mangle]
+pub extern "C" fn infera_last_error() -> *const c_char {
+    LAST_ERROR.with(|cell| match *cell.borrow() {
+        Some(ref c_string) => c_string.as_ptr(),
+        None => std::ptr::null(),
+    })
 }
 
 #[cfg(feature = "tract")]
@@ -61,23 +80,6 @@ pub unsafe extern "C" fn infera_free(ptr: *mut c_char) {
         return;
     }
     let _ = CString::from_raw(ptr);
-}
-
-#[no_mangle]
-pub extern "C" fn infera_last_error() -> *const c_char {
-    let guard = LAST_ERROR.read();
-    static LAST_ERROR_CSTR: AtomicPtr<c_char> = AtomicPtr::new(std::ptr::null_mut());
-
-    unsafe {
-        if let Some(old) = std::ptr::NonNull::new(LAST_ERROR_CSTR.load(Ordering::SeqCst)) {
-            drop(CString::from_raw(old.as_ptr()));
-        }
-        let c =
-            CString::new(guard.as_str()).unwrap_or_else(|_| CString::new("invalid utf8").unwrap());
-        let ptr = c.into_raw();
-        LAST_ERROR_CSTR.store(ptr, Ordering::SeqCst);
-        ptr as *const c_char
-    }
 }
 
 #[repr(C)]
@@ -308,7 +310,7 @@ fn run_inference_impl(
     let output_data: Vec<f32> = output_array.iter().cloned().collect();
     let output_len = output_data.len();
 
-    // Convert to raw pointer (caller must free this) - use correct Box syntax
+    // Convert to raw pointer (caller must free this)
     let output_ptr = Box::into_raw(output_data.into_boxed_slice()) as *mut f32;
 
     Ok(InferaInferenceResult {
@@ -377,7 +379,7 @@ fn get_model_metadata_impl(model_name: &str) -> Result<ModelMetadata, InferaErro
     let input_shape_len = input_shape.len();
     let output_shape_len = output_shape.len();
 
-    // Convert to raw pointers (caller must free these) - use correct Box syntax
+    // Convert to raw pointers (caller must free these)
     let input_shape_ptr = Box::into_raw(input_shape.into_boxed_slice()) as *mut i64;
     let output_shape_ptr = Box::into_raw(output_shape.into_boxed_slice()) as *mut i64;
 
