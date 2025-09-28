@@ -93,3 +93,4 @@ target/
 standalone-build/
 _rust.h
 uv.lock
+tests/temp_models/

@@ -32,6 +32,10 @@ typedef struct {
 void infera_free(char *ptr);
 const char *infera_last_error(void);
 
+// Version and autoload functions
+char *infera_version(void);
+char *infera_autoload_dir(const char *path);
+
 // Model management functions
 int32_t infera_load_onnx_model(const char *name, const char *path);
 int32_t infera_unload_onnx_model(const char *name);
@@ -40,7 +44,6 @@ int32_t infera_unload_onnx_model(const char *name);
 InferaInferenceResult infera_run_inference(const char *model_name,
                                            const float *data, size_t rows,
                                            size_t cols);
-
 InferaInferenceResult infera_predict_blob(const char *model_name,
                                           const uint8_t *blob_data,
                                           size_t blob_len);
