@@ -23,20 +23,20 @@ repos:
     hooks:
       - id: format
         name: Format Code
-        entry: make format
+        entry: make rust-format
         language: system
         pass_filenames: false
         stages: [ pre-commit ]
 
       - id: lint
         name: Check Code Style
-        entry: make lint
+        entry: make rust-lint
         language: system
         pass_filenames: false
         stages: [ pre-commit ]
 
       - id: test
         name: Run Tests
-        entry: make nexttest
+        entry: make rust-test
         language: system
         pass_filenames: false

@@ -24,7 +24,7 @@ on data stored in DuckDB tables.
 It is developed in Rust and uses [Tract](https://github.com/snipsco/tract) as the backend inference engine.
 Infera supports loading and running models in [ONNX](https://onnx.ai/) format.
 Check out the [ONNX Model Zoo](https://huggingface.co/onnxmodelzoo) repositors on Hugging Face for a large collection of
-ready-to-use models that can be used with Infera.
+ready-to-use models (more than 1700) that can be used with Infera.
 
 In a conventional data science workflow, when data is stored in a database, it is not normally possible to use ML models
 directly on the data.
@@ -37,7 +37,10 @@ A tool like Infera removes the need for moving the data, which simplifies the wo
 
 - Adds ML inference as first-class citizens in SQL queries.
 - Supports loading and using local and remote models.
+- Supports autoloading all models from a specified directory.
 - Supports using ML models in ONNX format with a simple and flexible API.
+- Supports inference on table columns or raw `BLOB` data.
+- Supports both single-value and multi-value model outputs.
 - Thread-safe, fast, and memory-efficient.
 
 See the [ROADMAP.md](ROADMAP.md) for the list of implemented and planned features.

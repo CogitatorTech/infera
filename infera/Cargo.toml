@@ -3,9 +3,6 @@ name = "infera"
 version = "0.1.0"
 edition = "2021"
 publish = false
-authors = ["Hassan Abedi <hassan.abedi.t+infera@gmail.com>"]
-description = "A DuckDB extension for performing inference inside the database"
-license = "MIT OR Apache-2.0"
 
 [lib]
 name = "infera"

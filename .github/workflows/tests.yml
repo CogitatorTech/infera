@@ -2,37 +2,34 @@ name: Run Tests
 
 on:
   workflow_dispatch:
-  workflow_call:
   pull_request:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        # Define the Rust versions to test against
-        rust-version: [ "1.83.0", "1.84.0", "beta", "stable" ]
-
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Set up Rust ${{ matrix.rust-version }}
-        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: ${{ matrix.rust-version }}
+          submodules: recursive
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
 
       - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y make
-          make install-deps
+          sudo apt-get update && sudo apt-get upgrade -y
+          sudo apt-get install -y gcc curl pkg-config libssl-dev make
+          cargo install cargo-tarpaulin
 
       - name: Run Tests and Generate Coverage Report
-        run: make coverage # Generates a coverage report
+        run: make rust-coverage # Generates a coverage report for Infera crate
 
       - name: Upload Coverage Reports to Codecov
         uses: codecov/codecov-action@v5

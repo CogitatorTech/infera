@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 // Imports for URL handling
-use hex;
 use sha2::{Digest, Sha256};
 
 #[cfg(feature = "tract")]
@@ -53,7 +52,7 @@ pub enum InferaError {
 }
 
 thread_local! {
-    static LAST_ERROR: RefCell<Option<CString>> = RefCell::new(None);
+    static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
 }
 
 fn set_last_error(err: &InferaError) {
@@ -361,7 +360,7 @@ fn run_inference_blob_impl(
     let model = models
         .get(model_name)
         .ok_or_else(|| InferaError::ModelNotFound(model_name.to_string()))?;
-    if blob_len % mem::size_of::<f32>() != 0 {
+    if !blob_len.is_multiple_of(mem::size_of::<f32>()) {
         return Err(InferaError::InvalidBlobSize);
     }
     let blob_bytes = unsafe { std::slice::from_raw_parts(blob_data, blob_len) };
@@ -375,7 +374,7 @@ fn run_inference_blob_impl(
         .filter(|&&d| d > 0)
         .map(|&d| d as usize)
         .product();
-    if float_vec.len() % expected_elements != 0 {
+    if !float_vec.len().is_multiple_of(expected_elements) {
         return Err(InferaError::BlobShapeMismatch {
             expected: expected_elements,
             actual: float_vec.len(),
@@ -507,16 +506,15 @@ pub extern "C" fn infera_set_autoload_dir(path: *const c_char) -> *mut c_char {
         let mut errors = Vec::new();
 
         let entries = fs::read_dir(path_str).map_err(|e| InferaError::IoError(e.to_string()))?;
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let file_path = entry.path();
-                if file_path.is_file() && file_path.extension().map_or(false, |ext| ext == "onnx") {
-                    if let Some(name) = file_path.file_stem().and_then(|s| s.to_str()) {
-                        if let Some(full_path) = file_path.to_str() {
-                            match load_model_impl(name, full_path) {
-                                Ok(_) => loaded.push(name.to_string()),
-                                Err(e) => errors
-                                    .push(json!({ "file": full_path, "error": e.to_string() })),
+        for entry in entries.flatten() {
+            let file_path = entry.path();
+            if file_path.is_file() && file_path.extension().is_some_and(|ext| ext == "onnx") {
+                if let Some(name) = file_path.file_stem().and_then(|s| s.to_str()) {
+                    if let Some(full_path) = file_path.to_str() {
+                        match load_model_impl(name, full_path) {
+                            Ok(_) => loaded.push(name.to_string()),
+                            Err(e) => {
+                                errors.push(json!({ "file": full_path, "error": e.to_string() }))
                             }
                         }
                     }

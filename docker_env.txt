@@ -5,4 +5,3 @@ VCPKG_HOST_TRIPLET=x64-linux-release
 GEN=ninja
 BUILD_SHELL=1
 DUCKDB_PLATFORM=linux_amd64_musl
-

@@ -38,8 +38,8 @@ rust-build: ## Build Infera in release mode
 	@echo "Building Infera in release mode..."
 	@cd infera && cargo build --release --features "duckdb_extension,tract"
 
-.PHONY: rust-build-dev
-rust-build-dev: ## Build Infera in debug mode
+.PHONY: rust-build-debug
+rust-build-debug: ## Build Infera in debug mode
 	@echo "Building Infera in debug mode..."
 	@cd infera && cargo build --features "duckdb_extension,tract"
 
@@ -52,6 +52,11 @@ rust-format: ## Format Rust files
 rust-test: rust-format ## Run tests
 	@echo "Running the unit tests for Infera..."
 	@cargo test --manifest-path infera/Cargo.toml --features "tract" --all-targets -- --nocapture
+
+.PHONY: rust-coverage
+rust-coverage: ## Generate code coverage report for Infera crate
+	@echo "Generating coverage report..."
+	@cargo tarpaulin --manifest-path infera/Cargo.toml --features "tract" --all-targets --out Xml
 
 .PHONY: rust-lint
 rust-lint: rust-format ## Run linter checks on Rust files
@@ -91,7 +96,7 @@ release: rust-build ## Build the extension in release mode (DuckDB + extension)
 	@cmake --build build/release --config Release
 
 .PHONY: debug
-debug: rust-build-dev ## Build the extension in debug mode (DuckDB + extension)
+debug: rust-build-debug ## Build the extension in debug mode (DuckDB + extension)
 	@echo "Building the extension in debug mode..."
 	@mkdir -p build/debug
 	@cmake $(GENERATOR) $(BUILD_FLAGS) $(EXT_DEBUG_FLAGS) $(VCPKG_MANIFEST_FLAGS) -DBUILD_SHELL=TRUE -DBUILD_MAIN_DUCKDB_LIBRARY=TRUE -DCMAKE_BUILD_TYPE=Debug -S $(DUCKDB_SRCDIR) -B build/debug
@@ -105,6 +110,7 @@ install-deps: ## Set up development environment
 	@echo "Setting up development environment..."
 	@sudo apt-get install -y cmake clang-format snap python3-pip
 	@sudo snap install rustup --classic
+	@cargo install cargo-tarpaulin cbindgen cargo-edit cargo-audit cargo-outdated
 	@cd infera && cargo check --features "tract"
 	@git submodule update --init --recursive
 	@pip install --user --upgrade pip uv
