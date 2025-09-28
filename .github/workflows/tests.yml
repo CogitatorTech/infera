@@ -1,8 +1,11 @@
 name: Run Tests
 
 on:
-  workflow_dispatch: { } # Allow manual execution
-  workflow_call: # Make this workflow callable from other workflows
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
