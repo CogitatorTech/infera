@@ -133,3 +133,24 @@ After building, you can run the included SQL test suite.
    make release
    ./build/release/duckdb -c "SELECT my_new_function();"
    ```
+
+### Build from Source
+
+You can build Infera from source by following these steps:
+
+```sh
+# Build in release mode
+make release
+```
+
+```sh
+# Build in debug mode
+make debug
+```
+
+After building, you can run the following binaries:
+
+- `./build/{release or debug}/duckdb`: this is the newest stable version of duckdb with Infera statically linked to it.
+- `./build/{release or debug}/test/unittest`: this is the test runner of duckdb (for `.test` files).
+- `./build/{release or debug}/extension/infera/infera.duckdb_extension`: this is the loadable binary that is a `.so`,
+  `.dylib`, or `.dll` file based on your platform.

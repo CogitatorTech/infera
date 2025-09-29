@@ -287,6 +287,14 @@ std::string InferaExtension::Version() const { return "v0.1.0"; }
 } // namespace duckdb
 
 extern "C" {
+// Exported entry point expected by DuckDB when loading a C++ loadable extension.
+// The build system passes -Wl,-exported_symbol,_infera_duckdb_cpp_init so this
+// symbol MUST exist with C linkage.
+DUCKDB_EXTENSION_API void infera_duckdb_cpp_init(duckdb::ExtensionLoader &loader) {
+  duckdb::LoadInternal(loader);
+}
+
+// Legacy/alternative entry point used by some tooling paths.
 DUCKDB_EXTENSION_API void infera_init(duckdb::DatabaseInstance &db) {
   duckdb::ExtensionLoader loader(db, "infera");
   duckdb::LoadInternal(loader);

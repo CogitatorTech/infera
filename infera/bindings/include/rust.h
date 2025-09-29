@@ -10,7 +10,6 @@
 extern "C" {
 #endif
 
-// Basic types and structures
 typedef struct {
   float *data;
   size_t len;
@@ -19,31 +18,20 @@ typedef struct {
   int32_t status;
 } InferaInferenceResult;
 
-// Basic functions
 void infera_free(char *ptr);
+void infera_free_result(InferaInferenceResult result);
 const char *infera_last_error(void);
-
-// Version and autoload functions
+char *infera_get_loaded_models(void);
+char *infera_get_model_info(const char *model_name);
 char *infera_get_version(void);
 char *infera_set_autoload_dir(const char *path);
-
-// Model management functions
 int32_t infera_load_model(const char *name, const char *path);
 int32_t infera_unload_model(const char *name);
-
-// Inference functions
 InferaInferenceResult infera_predict(const char *model_name, const float *data,
                                      size_t rows, size_t cols);
 InferaInferenceResult infera_predict_from_blob(const char *model_name,
                                                const uint8_t *blob_data,
                                                size_t blob_len);
-
-// Utility functions
-char *infera_get_loaded_models(void);
-char *infera_get_model_info(const char *model_name);
-
-// Memory cleanup functions
-void infera_free_result(InferaInferenceResult result);
 
 #ifdef __cplusplus
 }
