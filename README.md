@@ -26,21 +26,24 @@ Infera supports loading and running models in [ONNX](https://onnx.ai/) format.
 Check out the [ONNX Model Zoo](https://huggingface.co/onnxmodelzoo) repositors on Hugging Face for a large collection of
 ready-to-use models (more than 1700) that can be used with Infera.
 
+### Motivation
+
 In a conventional data science workflow, when data is stored in a database, it is not normally possible to use ML models
 directly on the data.
 Users need to move the data out of the database first (for example, export it to a CSV file), load the data into a
-Python environment, run the model there, and then import the results back into the database.
-This process can be time-consuming and inefficient.
-A tool like Infera removes the need for moving the data, which simplifies the workflow and speeds up the process.
+Python or R environment, run the model there, and then import the results back into the database.
+This process is time-consuming and inefficient.
+Infera aims to solve this problem by letting users to run ML models directly in SQL queries inside the database.
+It simplifies the workflow and speeds up the process for users, and eliminates the need for moving data around.
 
 ### Features
 
 - Adds ML inference as first-class citizens in SQL queries.
-- Supports loading and using local and remote models.
-- Supports autoloading all models from a specified directory.
+- Supports loading and using local as well as remote models.
 - Supports using ML models in ONNX format with a simple and flexible API.
-- Supports inference on table columns or raw `BLOB` data.
+- Supports performing inference on table columns or raw `BLOB` (tensor) data.
 - Supports both single-value and multi-value model outputs.
+- Supports autoloading all models from a specified directory.
 - Thread-safe, fast, and memory-efficient.
 
 See the [ROADMAP.md](ROADMAP.md) for the list of implemented and planned features.
@@ -74,7 +77,7 @@ SELECT infera_unload_model('linear_model');
 
 ### Documentation
 
-Check out the [docs](docs/README.md) for API documentation and usage examples.
+Check out the [docs](docs/README.md) directory for the API documentation and usage examples.
 
 ---
 
@@ -84,7 +87,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to make a contribution
 
 ### License
 
-Infera is available under either of the following licenses at your option:
+Infera is available under either of the following licenses:
 
 * MIT License ([LICENSE-MIT](LICENSE-MIT))
 * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
