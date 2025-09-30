@@ -24,7 +24,7 @@
 namespace duckdb {
 
 static std::string GetInferaError() {
-  const char *err = infera_last_error();
+  const char *err = infera::infera_last_error();
   return err ? std::string(err) : std::string("unknown error");
 }
 
@@ -38,19 +38,19 @@ static void SetAutoloadDir(DataChunk &args, ExpressionState &state, Vector &resu
     throw InvalidInputException("Path cannot be NULL");
   }
   std::string path_str = path_val.ToString();
-  char *result_json_c = infera_set_autoload_dir(path_str.c_str());
+  char *result_json_c = infera::infera_set_autoload_dir(path_str.c_str());
   result.SetVectorType(VectorType::CONSTANT_VECTOR);
   ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, result_json_c);
   ConstantVector::SetNull(result, false);
-  infera_free(result_json_c);
+  infera::infera_free(result_json_c);
 }
 
 static void GetVersion(DataChunk &args, ExpressionState &state, Vector &result) {
-  char *info_json_c = infera_get_version();
+  char *info_json_c = infera::infera_get_version();
   result.SetVectorType(VectorType::CONSTANT_VECTOR);
   ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, info_json_c);
   ConstantVector::SetNull(result, false);
-  infera_free(info_json_c);
+  infera::infera_free(info_json_c);
 }
 
 static void LoadModel(DataChunk &args, ExpressionState &state, Vector &result) {
@@ -68,7 +68,7 @@ static void LoadModel(DataChunk &args, ExpressionState &state, Vector &result) {
   if (model_name_str.empty()) {
     throw InvalidInputException("Model name cannot be empty");
   }
-  int rc = infera_load_model(model_name_str.c_str(), path_str.c_str());
+  int rc = infera::infera_load_model(model_name_str.c_str(), path_str.c_str());
   bool success = rc == 0;
   if (!success) {
     throw InvalidInputException("Failed to load model '" + model_name_str + "': " + GetInferaError());
@@ -88,7 +88,7 @@ static void UnloadModel(DataChunk &args, ExpressionState &state, Vector &result)
     throw InvalidInputException("Model name cannot be NULL");
   }
   std::string model_name_str = model_name.ToString();
-  int rc = infera_unload_model(model_name_str.c_str());
+  int rc = infera::infera_unload_model(model_name_str.c_str());
   bool success = (rc == 0);
   if (!success) {
       throw InvalidInputException("Failed to unload model '" + model_name_str + "': " + GetInferaError());
@@ -143,13 +143,13 @@ static void Predict(DataChunk &args, ExpressionState &state, Vector &result) {
   std::vector<float> features;
   ExtractFeatures(args, features);
 
-  InferaInferenceResult res = infera_predict(model_name_str.c_str(), features.data(), batch_size, feature_count);
+  infera::InferaInferenceResult res = infera::infera_predict(model_name_str.c_str(), features.data(), batch_size, feature_count);
   if (res.status != 0) {
     throw InvalidInputException("Inference failed for model '" + model_name_str + "': " + GetInferaError());
   }
   if (res.rows != batch_size || res.cols != 1) {
     std::string err_msg = StringUtil::Format("Model output shape mismatch. Expected (%d, 1), but got (%d, %d).", batch_size, res.rows, res.cols);
-    infera_free_result(res);
+    infera::infera_free_result(res);
     throw InvalidInputException(err_msg);
   }
   result.SetVectorType(VectorType::FLAT_VECTOR);
@@ -157,7 +157,7 @@ static void Predict(DataChunk &args, ExpressionState &state, Vector &result) {
   for (idx_t i = 0; i < batch_size; i++) {
     result_data[i] = res.data[i];
   }
-  infera_free_result(res);
+  infera::infera_free_result(res);
 }
 
 static void PredictFromBlob(DataChunk &args, ExpressionState &state, Vector &result) {
@@ -177,9 +177,9 @@ static void PredictFromBlob(DataChunk &args, ExpressionState &state, Vector &res
     string_t blob_str_t = blob_val.GetValueUnsafe<string_t>();
     auto blob_ptr = reinterpret_cast<const uint8_t *>(blob_str_t.GetDataUnsafe());
     auto blob_len = blob_str_t.GetSize();
-    InferaInferenceResult res = infera_predict_from_blob(model_name_str.c_str(), blob_ptr, blob_len);
+    infera::InferaInferenceResult res = infera::infera_predict_from_blob(model_name_str.c_str(), blob_ptr, blob_len);
     if (res.status != 0) {
-      infera_free_result(res);
+      infera::infera_free_result(res);
       throw InvalidInputException("Inference failed for model '" + model_name_str + "': " + GetInferaError());
     }
     std::vector<Value> elems;
@@ -188,17 +188,17 @@ static void PredictFromBlob(DataChunk &args, ExpressionState &state, Vector &res
       elems.emplace_back(Value::FLOAT(res.data[j]));
     }
     result.SetValue(i, Value::LIST(std::move(elems)));
-    infera_free_result(res);
+    infera::infera_free_result(res);
   }
   result.Verify(args.size());
 }
 
 static void GetLoadedModels(DataChunk &args, ExpressionState &state, Vector &result) {
-  char *models_json = infera_get_loaded_models();
+  char *models_json = infera::infera_get_loaded_models();
   result.SetVectorType(VectorType::CONSTANT_VECTOR);
   ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, models_json);
   ConstantVector::SetNull(result, false);
-  infera_free(models_json);
+  infera::infera_free(models_json);
 }
 
 static void PredictMulti(DataChunk &args, ExpressionState &state, Vector &result) {
@@ -211,14 +211,14 @@ static void PredictMulti(DataChunk &args, ExpressionState &state, Vector &result
   std::vector<float> features;
   ExtractFeatures(args, features);
 
-  InferaInferenceResult res = infera_predict(model_name_str.c_str(), features.data(), batch_size, feature_count);
+  infera::InferaInferenceResult res = infera::infera_predict(model_name_str.c_str(), features.data(), batch_size, feature_count);
   if (res.status != 0) {
-    infera_free_result(res);
+    infera::infera_free_result(res);
     throw InvalidInputException("Inference failed for model '" + model_name_str + "': " + GetInferaError());
   }
   if (res.rows != batch_size) {
     std::string err_msg = StringUtil::Format("Model output row count mismatch. Expected %d, but got %d.", batch_size, res.rows);
-    infera_free_result(res);
+    infera::infera_free_result(res);
     throw InvalidInputException(err_msg);
   }
   result.SetVectorType(VectorType::FLAT_VECTOR);
@@ -236,7 +236,7 @@ static void PredictMulti(DataChunk &args, ExpressionState &state, Vector &result
     oss << "]";
     result_data[row_idx] = StringVector::AddString(result, oss.str());
   }
-  infera_free_result(res);
+  infera::infera_free_result(res);
 }
 
 static void GetModelInfo(DataChunk &args, ExpressionState &state, Vector &result) {
@@ -249,12 +249,12 @@ static void GetModelInfo(DataChunk &args, ExpressionState &state, Vector &result
     throw InvalidInputException("Model name cannot be NULL");
   }
   std::string model_name_str = model_name.ToString();
-  char *json_meta = infera_get_model_info(model_name_str.c_str());
+  char *json_meta = infera::infera_get_model_info(model_name_str.c_str());
 
   result.SetVectorType(VectorType::CONSTANT_VECTOR);
   ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, json_meta);
   ConstantVector::SetNull(result, false);
-  infera_free(json_meta);
+  infera::infera_free(json_meta);
 }
 
 static void LoadInternal(ExtensionLoader &loader) {

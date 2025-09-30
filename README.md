@@ -23,8 +23,8 @@ Infera is DuckDB extension that lets you use machine learning (ML) models direct
 on data stored in DuckDB tables.
 It is developed in Rust and uses [Tract](https://github.com/snipsco/tract) as the backend inference engine.
 Infera supports loading and running models in [ONNX](https://onnx.ai/) format.
-Check out the [ONNX Model Zoo](https://huggingface.co/onnxmodelzoo) repositors on Hugging Face for a large collection of
-ready-to-use models (more than 1700) that can be used with Infera.
+Check out the [ONNX Model Zoo](https://huggingface.co/onnxmodelzoo) repositors on Hugging Face for a very large collection of
+ready-to-use models that can be used with Infera.
 
 ### Motivation
 

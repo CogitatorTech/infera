@@ -7,7 +7,7 @@ namespace = "infera"
 cpp_compat = true
 
 # Output settings
-tab_width = 4
+tab_width = 2
 line_length = 100
 braces = "SameLine"
 include_guard = "INFERA_H"

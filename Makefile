@@ -7,6 +7,7 @@ RUST_LIB := infera/target/release/$(EXT_NAME).a
 DUCKDB_SRCDIR := ./external/duckdb/
 EXT_CONFIG := ${PROJ_DIR}extension_config.cmake
 TESTS_DIR := tests
+EXAMPLES_DIR := docs/examples
 SHELL := /bin/bash
 PYTHON := python3
 
@@ -76,8 +77,8 @@ rust-clean: ## Clean Rust build artifacts
 .PHONY: create-bindings
 create-bindings: ## Generate C bindings from Rust code
 	@echo "Generating C bindings for Infera..."
-	@cd infera && cbindgen --config cbindgen.toml --crate infera --output bindings/include/_rust.h
-	@echo "C bindings generated at infera/bindings/include/_rust.h"
+	@cd infera && cbindgen --config cbindgen.toml --crate infera --output bindings/include/rust.h
+	@echo "C bindings generated at infera/bindings/include/rust.h"
 
 # ==============================================================================
 # Targets for Building the Extension
@@ -138,11 +139,11 @@ clean-all: clean rust-clean ## Clean everything
 check: rust-lint rust-test ## Run all checks
 	@echo "All checks passed!"
 
-.PHONY: test-infera
-test-infera: ## Run SQL tests for the Infera extension
-	@echo "Running every SQL file in the `tests/sql` directory..."
-	@for sql_file in $(TESTS_DIR)/sql/*.sql; do \
-		echo "Running test: $$sql_file"; \
+.PHONY: examples
+examples: ## Run SQL examples for Infera extension
+	@echo "Running the examples in the ${EXAMPLES_DIR} directory..."
+	@for sql_file in $(EXAMPLES_DIR)/*.sql; do \
+		echo "Running example: $$sql_file"; \
 		./build/release/duckdb < $$sql_file; \
 		echo "============================================================================"; \
 	done
