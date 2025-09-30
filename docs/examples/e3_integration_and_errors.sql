@@ -1,72 +1,47 @@
--- Tests error handling and integration with larger SQL queries.
+-- integration & error handling demo
 .echo on
-LOAD infera;
+load infera;
 
--- =============================================================================
--- Test 1: Error Handling for Non-existent Models
--- =============================================================================
-SELECT '--- Testing Error Handling ---';
+-- section 1: missing model behavior
+select '## missing model behavior';
+select infera_get_model_info('nonexistent_model') as missing_model_info;  -- returns JSON with error
+select infera_unload_model('nonexistent_model') as unload_missing;        -- idempotent true
 
--- Check info for a model that is not loaded.
-SELECT infera_get_model_info('nonexistent_model');
+-- section 2: batch style predictions (deterministic)
+select '## batch predictions';
+select infera_load_model('linear', 'test/models/linear.onnx') as loaded_linear;
+-- deterministic feature set (3 rows)
+create or replace table features as
+values
+  (1, 1.0::float, 2.0::float, 3.0::float),
+  (2, 0.5::float, 1.0::float, 1.5::float),
+  (3, -1.0::float, 0.0::float, 2.0::float)
+  ;
+-- compute predictions row-wise
+select column0 as id, column1 as f1, column2 as f2, column3 as f3,
+       infera_predict('linear', column1, column2, column3) as prediction
+from features
+order by 1;
+-- aggregate over the small batch
+select avg(infera_predict('linear', column1, column2, column3)) as avg_prediction,
+       count(*) as n
+from features;
 
--- Try to unload a model that is not loaded.
-SELECT infera_unload_model('nonexistent_model');
+-- section 3: null feature error
+select '## null feature error';
+create or replace table features_with_nulls as values (1, 1.0::float, 2.0::float, null::float);
+-- this will raise an error if executed directly; kept commented for demonstration
+-- select infera_predict('linear', column1, column2, column3) from features_with_nulls;
 
+-- instead, show detection:
+select column0 as id,
+       (column3 is null) as has_null_feature
+from features_with_nulls;
 
--- =============================================================================
--- Test 2: Batch Processing and Aggregation
--- =============================================================================
-SELECT '--- Testing Batch Processing and Aggregation ---';
-
--- Load a model to use for batch tests.
-SELECT infera_load_model('linear', 'test/models/linear.onnx');
-
--- Create a table with sample feature data, casting to FLOAT.
-CREATE OR REPLACE TABLE features AS
-SELECT
-    row_number() OVER () as id,
-    (random() * 10)::FLOAT as f1,
-    (random() * 10)::FLOAT as f2,
-    (random() * 10)::FLOAT as f3
-FROM generate_series(1, 100);
-
--- Run prediction on a single row from the table to test integration.
--- This will now pass because the batch size is 1.
-SELECT
-    id,
-    f1, f2, f3,
-    infera_predict('linear', f1, f2, f3) as prediction
-FROM features
-WHERE id = 1;
-
--- Use the prediction function on a single row for an aggregate query.
-SELECT
-    AVG(infera_predict('linear', f1, f2, f3)) as avg_prediction,
-    COUNT(*) as total_rows
-FROM features
-WHERE id = 1;
-
-
--- =============================================================================
--- Test 3: NULL Value Handling
--- =============================================================================
-SELECT '--- Testing NULL Value Handling ---';
-
--- The current implementation should throw an error when a feature is NULL.
--- This test verifies that behavior.
-CREATE OR REPLACE TABLE features_with_nulls AS
-SELECT 1 as id, 1.0::FLOAT as f1, 2.0::FLOAT as f2, NULL::FLOAT as f3;
-
-SELECT infera_predict('linear', f1, f2, f3) FROM features_with_nulls;
-
-
--- =============================================================================
--- Cleanup
--- =============================================================================
-SELECT '--- Cleaning Up ---';
-DROP TABLE features;
-DROP TABLE features_with_nulls;
-SELECT infera_unload_model('linear');
+-- section 4: cleanup
+select '## cleanup';
+drop table features;
+drop table features_with_nulls;
+select infera_unload_model('linear') as unloaded_linear;
 
 .echo off

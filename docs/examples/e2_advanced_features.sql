@@ -1,54 +1,34 @@
--- Tests advanced features like remote model loading and BLOB inputs.
+-- advanced features: remote loading & blob inference
 .echo on
-LOAD infera;
+load infera;
 
--- =============================================================================
--- Test 1: Remote Model Loading
--- =============================================================================
-SELECT '--- Testing Remote Model Loading ---';
+-- section 1: remote model loading (small linear model hosted on github)
+select '## remote model';
+create or replace macro model_name() as 'remote_linear_model';
+create or replace macro model_url() as 'https://github.com/CogitatorTech/infera/raw/refs/heads/main/test/models/linear.onnx';
+select infera_load_model(model_name(), model_url()) as loaded_remote;          -- expect true
+select instr(infera_get_loaded_models(), model_name()) > 0 as remote_listed;   -- expect true
+select abs(infera_predict(model_name(), 1.0, 2.0, 3.0) - 1.75) < 1e-5 as remote_predict_ok; -- expect true
+select infera_unload_model(model_name()) as remote_unloaded;                   -- expect true
 
--- Define macros for the model name and URL for clarity.
-CREATE OR REPLACE MACRO model_name() AS 'remote_linear_model';
-CREATE OR REPLACE MACRO model_url() AS 'https://github.com/CogitatorTech/infera/raw/refs/heads/main/test/models/linear.onnx';
+-- section 2: blob inference (mobilenet example)
+select '## blob inference';
+-- Load a vision model from huggingface (size & load time depend on network).
+select infera_load_model(
+  'mobilenet',
+  'https://huggingface.co/onnxmodelzoo/tf_mobilenetv3_small_075_Opset17/resolve/main/tf_mobilenetv3_small_075_Opset17.onnx'
+) as mobilenet_loaded;
 
--- Load the model from the URL.
-SELECT infera_load_model(model_name(), model_url()) AS loaded_from_url;
+-- (optional) to see an error for an invalid blob size, you could run:
+-- select infera_predict_from_blob('mobilenet', cast('abc' as blob)); -- would error (invalid BLOB size)
 
--- Verify the model appears in the list.
-SELECT instr(infera_get_loaded_models(), model_name()) > 0 AS model_is_listed;
-
--- Run a prediction to confirm it's functional (y = 1.75 for these features).
-SELECT abs(infera_predict(model_name(), 1.0, 2.0, 3.0) - 1.75) < 1e-5 AS prediction_is_correct;
-
--- Unload the model to clean up.
-SELECT infera_unload_model(model_name()) AS unloaded;
-SELECT instr(infera_get_loaded_models(), model_name()) = 0 AS model_is_removed;
-
-
--- =============================================================================
--- Test 2: BLOB Input Prediction
--- =============================================================================
-SELECT '--- Testing BLOB Input Prediction ---';
-
--- Load a model that expects a large tensor input.
-SELECT infera_load_model(
-    'mobilenet',
-    'https://huggingface.co/onnxmodelzoo/tf_mobilenetv3_small_075_Opset17/resolve/main/tf_mobilenetv3_small_075_Opset17.onnx'
-);
-
--- Test error handling with an incorrectly sized BLOB.
--- This is expected to fail.
-SELECT infera_predict_from_blob('mobilenet', 'dummy_bytes');
-
--- Test with a correctly sized, zero-filled BLOB.
--- Model input is 1*224*224*3 floats. A float is 4 bytes. Total size = 602112 bytes.
-WITH const AS (
-  SELECT CAST(REPEAT(CHR(0), 602112) AS BLOB) AS zero_blob
+-- construct zero-filled blob of correct size: 1*224*224*3 floats * 4 bytes = 602112
+with zeros as (
+  select cast(repeat(chr(0), 602112) as blob) as zero_blob
 )
-SELECT len(infera_predict_from_blob('mobilenet', zero_blob)) as output_length
-FROM const;
+select len(infera_predict_from_blob('mobilenet', zero_blob)) as mobilenet_blob_output_len from zeros; -- length of output list
 
--- Clean up.
-SELECT infera_unload_model('mobilenet');
+select infera_unload_model('mobilenet') as mobilenet_unloaded;
 
+-- optional: remote multi-output or larger models could be added similarly.
 .echo off

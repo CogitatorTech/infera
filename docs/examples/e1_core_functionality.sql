@@ -1,69 +1,35 @@
--- Tests the core, end-to-end functionality of the extension.
+-- core functionality walkthrough (load -> info -> predict -> unload)
 .echo on
-LOAD infera;
+load infera;
 
--- =============================================================================
--- Test 1: Version and Initial State
--- =============================================================================
-SELECT '--- Testing Version and Initial State ---';
+-- section 1: version & initial state
+select '## version & initial state';
+select infera_get_version() as version_json;           -- shows version, backend, cache dir
+select infera_get_loaded_models() as initial_models;   -- expect []
 
--- Check that the version function returns a valid JSON.
-SELECT infera_get_version();
+-- section 2: load model and inspect
+select '## load model';
+select infera_load_model('linear', 'test/models/linear.onnx') as loaded;  -- expect true
+select instr(infera_get_loaded_models(), 'linear') > 0 as is_listed;      -- expect 1/true
+select infera_get_model_info('linear') as model_info;                     -- contains input/output shapes
+select position('"input_shape"' in infera_get_model_info('linear')) > 0 as has_input_shape; -- expect true
 
--- Check that no models are loaded initially.
-SELECT infera_get_loaded_models() AS initial_models;
+-- section 3: prediction
+-- model formula documented in tests: y = 2*f1 - 1*f2 + 0.5*f3 + 0.25
+select '## prediction';
+select infera_predict('linear', 1.0, 2.0, 3.0) as prediction;            -- expect 1.75
+select abs(infera_predict('linear', 1.0, 2.0, 3.0) - 1.75) < 1e-5 as prediction_ok; -- expect true
+select infera_predict_multi('linear', 1.0, 2.0, 3.0) as predict_multi;   -- single value inside list-like string
 
+-- section 4: unload
+select '## unload';
+select infera_unload_model('linear') as unloaded;                         -- expect true
+select infera_get_loaded_models() as after_unload;                        -- expect []
 
--- =============================================================================
--- Test 2: Local Model Roundtrip (Load -> Info -> Predict -> Unload)
--- =============================================================================
-SELECT '--- Testing Local Model Roundtrip ---';
-
--- Load the simple linear model.
-SELECT infera_load_model('linear', 'test/models/linear.onnx') AS loaded;
-
--- Verify the model appears in the list.
-SELECT instr(infera_get_loaded_models(), 'linear') > 0 AS after_load;
-
--- Retrieve model info and check for expected input shape.
-SELECT infera_get_model_info('linear') AS metadata;
-SELECT position('"input_shape":[1,3]' IN infera_get_model_info('linear')) > 0 AS metadata_ok;
-
--- Run deterministic predictions. Model is y = 2*x1 - 1*x2 + 0.5*x3 + 0.25
--- For (1.0, 2.0, 3.0), expected y = 1.75
-SELECT infera_predict('linear', 1.0, 2.0, 3.0) AS single_prediction;
-SELECT abs(infera_predict('linear', 1.0, 2.0, 3.0) - 1.75) < 1e-5 AS single_predict_ok;
-
--- Test the multi-output prediction function.
-SELECT infera_predict_multi('linear', 1.0, 2.0, 3.0) as multi_prediction;
-SELECT instr(infera_predict_multi('linear', 1.0, 2.0, 3.0), '1.75') > 0 AS multi_predict_ok;
-
--- Unload the model and confirm its removal.
-SELECT infera_unload_model('linear') AS unloaded;
-SELECT infera_get_loaded_models() AS after_unload;
-
-
--- =============================================================================
--- Test 3: Autoload Directory
--- =============================================================================
-SELECT '--- Testing Autoload Directory ---';
-
--- Create a temporary directory and copy the model into it.
-.shell mkdir -p test/temp_models
-.shell cp test/models/linear.onnx test/temp_models/
-
--- Run the autoload function.
-SELECT infera_set_autoload_dir('test/temp_models');
-
--- Verify the model was loaded automatically.
-SELECT instr(infera_get_loaded_models(), 'linear') > 0 AS autoloaded_model_is_listed;
-
--- Run a prediction to confirm it's functional.
-SELECT abs(infera_predict('linear', 1.0, 2.0, 3.0) - 1.75) < 1e-5 AS autoload_predict_ok;
-
--- Clean up.
-SELECT infera_unload_model('linear');
-.shell rm -rf test/temp_models
-
+-- section 5: autoload (reuse existing test/models directory)
+select '## autoload';
+select infera_set_autoload_dir('test/models') as autoload_result;         -- loads linear (& others if added)
+select instr(infera_get_loaded_models(), 'linear') > 0 as autoload_contains_linear; -- expect true
+select infera_unload_model('linear') as unload_after_autoload;            -- true (idempotent)
 
 .echo off

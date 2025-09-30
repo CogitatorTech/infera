@@ -1,0 +1,35 @@
+# name: test/sql/test_multi_output.test
+# group: [infera]
+
+# tests multi-output model behavior for infera_predict_multi vs infera_predict
+
+statement ok
+pragma enable_verification
+
+statement ok
+load 'build/release/extension/infera/infera.duckdb_extension'
+
+# load multi-output model (input shape [1,4] -> output shape [1,4])
+statement ok
+select infera_load_model('multi_output', 'test/models/multi_output.onnx')
+
+# model info should reflect output_shape [1,4]
+query I
+select position('"output_shape":[1,4]' in infera_get_model_info('multi_output')) > 0
+----
+true
+
+# infera_predict_multi should return a json-like list string with four elements
+query I
+select infera_predict_multi('multi_output', 1.0, 2.0, 3.0, 4.0)
+----
+[1,2,3,4]
+
+# infera_predict should fail because it expects single-column output
+statement error
+select infera_predict('multi_output', 1.0, 2.0, 3.0, 4.0)
+----
+Invalid Input Error: Model output shape mismatch. Expected (1, 1), but got (1, 4).
+
+statement ok
+select infera_unload_model('multi_output')

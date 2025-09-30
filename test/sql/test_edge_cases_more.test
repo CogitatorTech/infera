@@ -1,0 +1,38 @@
+# name: test/sql/test_edge_cases_more.test
+# group: [infera]
+
+# further edge cases for infera extension behavior
+
+statement ok
+pragma enable_verification
+
+statement ok
+load 'build/release/extension/infera/infera.duckdb_extension'
+
+# load model
+statement ok
+select infera_load_model('linear', 'test/models/linear.onnx')
+
+# null blob input yields null (not an error)
+query I
+select infera_predict_from_blob('linear', null::blob) is null
+----
+true
+
+# unload returns true
+query I
+select infera_unload_model('linear')
+----
+true
+
+# second unload still returns true (idempotent)
+query I
+select infera_unload_model('linear')
+----
+true
+
+# model info after unload should contain model not found message
+query I
+select position('Model not found' in infera_get_model_info('linear')) > 0
+----
+true

@@ -1,0 +1,35 @@
+# name: test/sql/test_autoload_and_json.test
+# group: [infera]
+
+# tests autoload error handling and json structure validation
+
+statement ok
+pragma enable_verification
+
+statement ok
+load 'build/release/extension/infera/infera.duckdb_extension'
+
+# autoload error (directory does not exist)
+query I
+select position('"error"' in infera_set_autoload_dir('nonexistent_dir___unlikely___xyz')) > 0
+----
+true
+
+# load model for json validation
+statement ok
+select infera_load_model('linear', 'test/models/linear.onnx')
+
+# validate json array string contains the model name and brackets
+query I
+select (position('[' in infera_get_loaded_models()) > 0) and (position('linear' in infera_get_loaded_models()) > 0) and (position(']' in infera_get_loaded_models()) > 0)
+----
+true
+
+# validate model info has required keys using simple substring checks
+query I
+select (position('"input_shape"' in infera_get_model_info('linear')) > 0) and (position('"output_shape"' in infera_get_model_info('linear')) > 0)
+----
+true
+
+statement ok
+select infera_unload_model('linear')

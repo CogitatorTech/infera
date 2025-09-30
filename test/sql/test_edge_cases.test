@@ -1,0 +1,61 @@
+# name: test/sql/test_edge_cases.test
+# group: [infera]
+
+# additional edge cases for the infera extension
+
+statement ok
+pragma enable_verification
+
+statement ok
+load 'build/release/extension/infera/infera.duckdb_extension'
+
+# load a baseline model
+statement ok
+select infera_load_model('linear', 'test/models/linear.onnx')
+
+# ensure second model can be loaded (distinct name same file)
+statement ok
+select infera_load_model('linear_b', 'test/models/linear.onnx')
+
+# both names should appear in the json list (order unspecified)
+query I
+select instr(infera_get_loaded_models(), 'linear') > 0 and instr(infera_get_loaded_models(), 'linear_b') > 0
+----
+true
+
+# invalid blob size (not multiple of 4)
+statement error
+select infera_predict_from_blob('linear', cast(repeat(chr(0), 5) as blob))
+----
+Invalid Input Error: Inference failed for model 'linear': Invalid BLOB size: length must be a multiple of 4
+
+# blob element count mismatch: 16 bytes -> 4 floats, expected multiple of 3
+statement error
+select infera_predict_from_blob('linear', cast(repeat(chr(0), 16) as blob))
+----
+Invalid Input Error: Inference failed for model 'linear': BLOB data does not match model's expected input shape. Expected 3 elements, but BLOB contained 4.
+
+# null model name predict returns NULL due to argument null propagation
+query I
+select infera_predict(null, 1.0, 2.0, 3.0) is null
+----
+true
+
+# empty model name load attempt
+statement error
+select infera_load_model('', 'test/models/linear.onnx')
+----
+Invalid Input Error: Model name cannot be empty
+
+# unload one model and attempt inference (should fail)
+statement ok
+select infera_unload_model('linear')
+
+statement error
+select infera_predict('linear', 1.0, 2.0, 3.0)
+----
+Invalid Input Error: Inference failed for model 'linear': Model not found: linear
+
+# cleanup remaining model
+statement ok
+select infera_unload_model('linear_b')
