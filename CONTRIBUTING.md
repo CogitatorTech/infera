@@ -1,21 +1,21 @@
 ## Contribution Guidelines
 
-Thank you for considering contributing to the project!
+Thank you for considering contributing to this project!
 Contributions are always welcome and appreciated.
 
 ### How to Contribute
 
-Please check the [issue tracker](https://github.com/habedi/template-go-project/issues) to see if there is an issue you
+Please check the [issue tracker](https://github.com/CogitatorTech/infera/issues) to see if there is an issue you
 would like to work on or if it has already been resolved.
 
 #### Reporting Bugs
 
-1. Open an issue on the [issue tracker](https://github.com/habedi/template-go-project/issues).
+1. Open an issue on the [issue tracker](https://github.com/CogitatorTech/infera/issues).
 2. Include information such as steps to reproduce, expected/actual behavior, and relevant logs or screenshots.
 
 #### Suggesting Features
 
-1. Open an issue on the [issue tracker](https://github.com/habedi/template-go-project/issues).
+1. Open an issue on the [issue tracker](https://github.com/CogitatorTech/infera/issues).
 2. Provide details about the feature, its purpose, and potential implementation ideas.
 
 ### Submitting Pull Requests
@@ -31,15 +31,15 @@ would like to work on or if it has already been resolved.
 
 #### Code Style
 
-- Use the `make format` command to format the code.
+- Use the `make rust-format` command to format the code.
 
 #### Running Tests
 
-- Use the `make test` command to run the tests.
+- Use the `make rust-test` and `make test` commands to run the tests.
 
 #### Running Linters
 
-- Use the `make lint` command to run the linters.
+- Use the `make rust-lint` command to run the linters.
 
 #### See Available Commands
 
