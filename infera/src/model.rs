@@ -9,8 +9,12 @@ use std::collections::HashMap;
 use tract_onnx::prelude::*;
 
 #[cfg(feature = "tract")]
+pub(crate) type OnnxModelPlan =
+    SimplePlan<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<dyn TypedOp>>>;
+
+#[cfg(feature = "tract")]
 pub(crate) struct OnnxModel {
-    pub model: SimplePlan<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<dyn TypedOp>>>,
+    pub model: OnnxModelPlan,
     pub input_shape: Vec<i64>,
     pub output_shape: Vec<i64>,
     pub name: String,

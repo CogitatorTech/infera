@@ -17,14 +17,18 @@ mod model;
 pub use error::infera_last_error;
 pub use ffi_utils::{infera_free, infera_free_result, InferaInferenceResult};
 
+/// Loads a model from a file or URL.
+///
+/// # Safety
+/// The `name` and `path` pointers must be valid, null-terminated C strings.
 #[no_mangle]
-pub extern "C" fn infera_load_model(name: *const c_char, path: *const c_char) -> i32 {
+pub unsafe extern "C" fn infera_load_model(name: *const c_char, path: *const c_char) -> i32 {
     let result = (|| -> Result<(), error::InferaError> {
         if name.is_null() || path.is_null() {
             return Err(error::InferaError::NullPointer);
         }
-        let name_str = unsafe { CStr::from_ptr(name) }.to_str()?;
-        let path_or_url_str = unsafe { CStr::from_ptr(path) }.to_str()?;
+        let name_str = CStr::from_ptr(name).to_str()?;
+        let path_or_url_str = CStr::from_ptr(path).to_str()?;
 
         let local_path = if path_or_url_str.starts_with("http") {
             http::handle_remote_model(path_or_url_str)?
@@ -45,13 +49,17 @@ pub extern "C" fn infera_load_model(name: *const c_char, path: *const c_char) ->
     }
 }
 
+/// Unloads a model.
+///
+/// # Safety
+/// The `name` pointer must be a valid, null-terminated C string.
 #[no_mangle]
-pub extern "C" fn infera_unload_model(name: *const c_char) -> i32 {
+pub unsafe extern "C" fn infera_unload_model(name: *const c_char) -> i32 {
     let result = (|| -> Result<(), error::InferaError> {
         if name.is_null() {
             return Err(error::InferaError::NullPointer);
         }
-        let name_str = unsafe { CStr::from_ptr(name) }.to_str()?;
+        let name_str = CStr::from_ptr(name).to_str()?;
         if model::MODELS.write().remove(name_str).is_some() {
             Ok(())
         } else {
@@ -68,8 +76,14 @@ pub extern "C" fn infera_unload_model(name: *const c_char) -> i32 {
     }
 }
 
+/// Runs inference on a model with the given input data.
+///
+/// # Safety
+/// The `model_name` and `data` pointers must be valid. `model_name` must be a
+/// null-terminated C string. `data` must point to a contiguous block of memory
+/// of size `rows * cols * size_of<f32>()`.
 #[no_mangle]
-pub extern "C" fn infera_predict(
+pub unsafe extern "C" fn infera_predict(
     model_name: *const c_char,
     data: *const f32,
     rows: usize,
@@ -79,7 +93,7 @@ pub extern "C" fn infera_predict(
         if model_name.is_null() || data.is_null() {
             return Err(error::InferaError::NullPointer);
         }
-        let name_str = unsafe { CStr::from_ptr(model_name) }.to_str()?;
+        let name_str = CStr::from_ptr(model_name).to_str()?;
         engine::run_inference_impl(name_str, data, rows, cols)
     })();
 
@@ -92,8 +106,14 @@ pub extern "C" fn infera_predict(
     }
 }
 
+/// Runs inference on a model with input data from a BLOB.
+///
+/// # Safety
+/// The `model_name` and `blob_data` pointers must be valid. `model_name` must be a
+/// null-terminated C string. `blob_data` must point to a contiguous block of
+/// memory of size `blob_len`.
 #[no_mangle]
-pub extern "C" fn infera_predict_from_blob(
+pub unsafe extern "C" fn infera_predict_from_blob(
     model_name: *const c_char,
     blob_data: *const u8,
     blob_len: usize,
@@ -102,7 +122,7 @@ pub extern "C" fn infera_predict_from_blob(
         if model_name.is_null() || blob_data.is_null() {
             return Err(error::InferaError::NullPointer);
         }
-        let name_str = unsafe { CStr::from_ptr(model_name) }.to_str()?;
+        let name_str = CStr::from_ptr(model_name).to_str()?;
         engine::run_inference_blob_impl(name_str, blob_data, blob_len)
     })();
 
@@ -115,13 +135,17 @@ pub extern "C" fn infera_predict_from_blob(
     }
 }
 
+/// Gets information about a loaded model.
+///
+/// # Safety
+/// The `model_name` pointer must be a valid, null-terminated C string.
 #[no_mangle]
-pub extern "C" fn infera_get_model_info(model_name: *const c_char) -> *mut c_char {
+pub unsafe extern "C" fn infera_get_model_info(model_name: *const c_char) -> *mut c_char {
     let result = (|| -> Result<String, error::InferaError> {
         if model_name.is_null() {
             return Err(error::InferaError::NullPointer);
         }
-        let name_str = unsafe { CStr::from_ptr(model_name) }.to_str()?;
+        let name_str = CStr::from_ptr(model_name).to_str()?;
         engine::get_model_metadata_impl(name_str)
     })();
 
@@ -155,13 +179,17 @@ pub extern "C" fn infera_get_version() -> *mut c_char {
     CString::new(json_str).unwrap_or_default().into_raw()
 }
 
+/// Sets a directory to automatically load models from.
+///
+/// # Safety
+/// The `path` pointer must be a valid, null-terminated C string.
 #[no_mangle]
-pub extern "C" fn infera_set_autoload_dir(path: *const c_char) -> *mut c_char {
+pub unsafe extern "C" fn infera_set_autoload_dir(path: *const c_char) -> *mut c_char {
     let result = (|| -> Result<serde_json::Value, error::InferaError> {
         if path.is_null() {
             return Err(error::InferaError::NullPointer);
         }
-        let path_str = unsafe { CStr::from_ptr(path) }.to_str()?;
+        let path_str = CStr::from_ptr(path).to_str()?;
 
         let mut loaded = Vec::new();
         let mut errors = Vec::new();

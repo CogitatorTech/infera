@@ -25,6 +25,13 @@ impl InferaInferenceResult {
     }
 }
 
+/// Frees a C string that was allocated by Rust.
+///
+/// # Safety
+///
+/// The `ptr` must be a pointer to a C string that was allocated by Rust's
+/// `CString::into_raw`. Calling this function with a pointer that was not
+/// allocated by `CString::into_raw` will result in undefined behavior.
 #[no_mangle]
 pub unsafe extern "C" fn infera_free(ptr: *mut c_char) {
     if !ptr.is_null() {
@@ -32,6 +39,13 @@ pub unsafe extern "C" fn infera_free(ptr: *mut c_char) {
     }
 }
 
+/// Frees the memory allocated for an `InferaInferenceResult`.
+///
+/// # Safety
+///
+/// The `res.data` pointer must have been allocated by Rust's `Vec` and the `res.len`
+/// must be the correct length of the allocated memory. Calling this function
+/// with a result that was not created by this library can lead to undefined behavior.
 #[no_mangle]
 pub unsafe extern "C" fn infera_free_result(res: InferaInferenceResult) {
     if !res.data.is_null() && res.len > 0 {

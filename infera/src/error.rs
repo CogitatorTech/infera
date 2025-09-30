@@ -7,6 +7,7 @@ use std::str::Utf8Error as StdUtf8Error;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[allow(dead_code)]
 pub enum InferaError {
     #[error("Model not found: {0}")]
     ModelNotFound(String),
