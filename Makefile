@@ -107,7 +107,7 @@ debug: rust-build-debug ## Build the extension in debug mode (DuckDB + extension
 # Development Targets
 # ==============================================================================
 .PHONY: install-deps
-install-deps: ## Set up development environment
+install-deps: ## Set up development environment (for Debian-based systems)
 	@echo "Setting up development environment..."
 	@sudo apt-get install -y cmake clang-format snap python3-pip
 	@sudo snap install rustup --classic
@@ -127,8 +127,8 @@ setup-hooks: ## Install Git hooks (pre-commit and pre-push)
 	@pre-commit install-hooks
 
 .PHONY: test-hooks
-test-hooks: ## Test Git hooks on all files
-	@echo "Testing Git hooks..."
+test-hooks: ## Run Git hooks on all files manually
+	@echo "Running Git hooks..."
 	@pre-commit run --all-files
 
 .PHONY: clean-all
@@ -136,7 +136,7 @@ clean-all: clean rust-clean ## Clean everything
 	@echo "All clean!"
 
 .PHONY: check
-check: rust-lint rust-test ## Run all checks
+check: rust-lint rust-test ## Run all checks (linting and tests)
 	@echo "All checks passed!"
 
 .PHONY: examples

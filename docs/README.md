@@ -1,6 +1,6 @@
 ### API Reference
 
-Table below includes the information about all SQL functions exposed by the Infera.
+The table below includes the information about all SQL functions exposed by Infera.
 
 | # | Function                                                | Return Type      | Description                                                                                                                                 |
 |---|:--------------------------------------------------------|:-----------------|:--------------------------------------------------------------------------------------------------------------------------------------------|
@@ -53,7 +53,7 @@ select id,
 from features_table;
 
 -- Get multiple outputs as a JSON array.
--- This is useful models that return multiple outputs per prediction (like a non-binary classifier)
+-- This is a useful models that return multiple outputs per prediction (like a non-binary classifier)
 select infera_predict_multi('multi_output_model', 1.0, 2.0);
 -- Output: [0.85, 0.12, 0.03]
 
@@ -64,7 +64,7 @@ from my_table;
 ```
 
 > [!IMPORTANT]
-> When you use a model model for inference, in essence it will be executed on your machine.
+> When you use a model, in essence, it will be executed on your machine.
 > So make sure you download and use models from trusted sources only.
 
 #### Utility Functions
@@ -114,13 +114,13 @@ You also need to have Rust (nightly) and Cargo installed via `rustup`.
 
 2. **Install dependencies:**
 
-   The project includes a `Makefile` target to help set up the development environment. For Debian-based systems, you
-   can run:
+   The project includes a [`Makefile`](../Makefile) target to help set up the development environment. For Debian-based
+   systems, you can run:
    ```bash
    make install-deps
    ```
    This will install necessary system packages, Rust tools, and Python dependencies. For other operating systems, please
-   refer to the `Makefile` to see the list of dependencies and install them manually.
+   check the `Makefile` to see the list of dependencies and install them manually.
 
 3. **Build the extension:**
 
@@ -140,11 +140,10 @@ You also need to have Rust (nightly) and Cargo installed via `rustup`.
    without needing to run the `LOAD` command.
 
 > [!NOTE]
-> After a successful build, you can run the following binaries:
-> - `./build/release/duckdb`: this is the newest stable version of duckdb with Infera statically linked to it.
-> - `./build/release/test/unittest`: this is the test runner of duckdb (for `.test` files).
-> - `./build/release/extension/infera/infera.duckdb_extension`: this is the loadable binary that is a `.so`,
-    `.dylib`, or `.dll` file based on your platform.
+> After a successful build, you will find the following files in the `build/release/` directory:
+> - `./build/release/duckdb`: this is a DuckDB binary with the Infera extension already statically linked to it.
+> - `./build/release/test/unittest`: this is the test runner for running the SQL tests in the `test/sql/` directory.
+> - `./build/release/extension/infera/infera.duckdb_extension`: this is the loadable extension file for Infera.
 
 ---
 
@@ -163,5 +162,5 @@ Infera is made up of two main components:
    responsibilities include:
     * Defining the custom SQL functions (like `infera_load_model` and `infera_predict`).
     * Translating data from DuckDB's internal vector-based format into the raw data pointers expected by the Rust FFI.
-    * Calling the Rust functions and handling the returned results.
+    * Calling the Rust functions and handling the returned results and errors.
     * Integrating with DuckDB's extension loading mechanism.

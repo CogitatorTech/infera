@@ -18,29 +18,29 @@ In-Database Machine Learning for DuckDB
 
 ---
 
-Infera is DuckDB extension that allows you use machine learning (ML) models directly in SQL queries to perform inference
-on data stored in DuckDB tables.
+Infera is a DuckDB extension that allows you to use machine learning (ML) models directly in SQL queries to perform
+inference on data stored in DuckDB tables.
 It is developed in Rust and uses [Tract](https://github.com/snipsco/tract) as the backend inference engine.
 Infera supports loading and running models in [ONNX](https://onnx.ai/) format.
-Check out the [ONNX Model Zoo](https://huggingface.co/onnxmodelzoo) repositors on Hugging Face for a large
+Check out the [ONNX Model Zoo](https://huggingface.co/onnxmodelzoo) repository on Hugging Face for a large
 collection of ready-to-use models that can be used with Infera.
 
 ### Motivation
 
-In a conventional data science workflow, when data is stored in a database, it is not normally possible to use ML models
-directly on the data.
-Users need to move the data out of the database first (for example, export it to a CSV file), load the data into a
+In a conventional data science workflow, when data is stored in a database, it is not typically possible to use ML
+models directly on the data.
+Users need to move the data out of the database first (for example, export it to a CSV file) and load the data into a
 Python or R environment, run the model there, and then import the results back into the database.
 This process is time-consuming and inefficient.
-Infera aims to solve this problem by letting users to run ML models directly in SQL queries inside the database.
+Infera aims to solve this problem by letting users run ML models directly in SQL queries inside the database.
 It simplifies the workflow and speeds up the process for users, and eliminates the need for moving data around.
 
 ### Features
 
-- Adds ML inference as first-class citizens in SQL queries.
+- Adds ML inference as a first-class citizen in SQL queries.
 - Supports loading and using local as well as remote models.
 - Supports using ML models in ONNX format with a simple and flexible API.
-- Supports performing inference on table columns or raw BLOB (tensor) data.
+- Supports performing inference on table columns or raw tensor data.
 - Supports both single-value and multi-value model outputs.
 - Supports autoloading all models from a specified directory.
 - Thread-safe, fast, and memory-efficient.
@@ -55,7 +55,7 @@ See the [ROADMAP.md](ROADMAP.md) for the list of implemented and planned feature
 
 ### Quickstart
 
-1. Clone the repository and build Infera extension from source:
+1. Clone the repository and build the Infera extension from source:
 
 ```bash
 git clone --recursive https://github.com/CogitatorTech/infera.git
@@ -96,7 +96,7 @@ select infera_get_version();
 
 > [!NOTE]
 > After building from source, the Infera binary will be `build/release/extension/infera/infera.duckdb_extension`.
-> You can load it using the `load 'build/release/extension/infera/infera.duckdb_extension';` in DuckDB shell.
+> You can load it using the `load 'build/release/extension/infera/infera.duckdb_extension';` in the DuckDB shell.
 > Note that the extension binary will only work with the DuckDB version that it was built against.
 > At the moment, Infera is not available as
 > a [DuckDB community extension](https://duckdb.org/community_extensions/list_of_extensions).
