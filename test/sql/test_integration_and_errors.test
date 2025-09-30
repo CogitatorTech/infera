@@ -1,0 +1,74 @@
+# name: test/sql/test_integration_and_errors.test
+# group: [infera]
+
+# Tests error handling and integration with larger SQL queries.
+
+statement ok
+PRAGMA enable_verification
+
+# Test 1: Error Handling for Non-existent Models
+
+# Check info for a model that is not loaded - should return NULL or empty
+query I
+SELECT infera_get_model_info('nonexistent_model') IS NULL
+----
+true
+
+# Try to unload a model that is not loaded - should handle gracefully
+statement ok
+SELECT infera_unload_model('nonexistent_model')
+
+# Test 2: Batch Processing and Aggregation
+
+statement ok
+SELECT infera_load_model('linear', 'test/models/linear.onnx')
+
+statement ok
+CREATE OR REPLACE TABLE features AS
+SELECT
+    row_number() OVER () as id,
+    (random() * 10)::FLOAT as f1,
+    (random() * 10)::FLOAT as f2,
+    (random() * 10)::FLOAT as f3
+FROM generate_series(1, 100)
+
+# Run prediction on a single row from the table to test integration
+query IRRR
+SELECT
+    id,
+    f1, f2, f3,
+    infera_predict('linear', f1, f2, f3) as prediction
+FROM features
+WHERE id = 1
+----
+1	<f1_value>	<f2_value>	<f3_value>	<prediction_value>
+
+# Use the prediction function for an aggregate query on a single row
+query RI
+SELECT
+    AVG(infera_predict('linear', f1, f2, f3)) as avg_prediction,
+    COUNT(*) as total_rows
+FROM features
+WHERE id = 1
+----
+<avg_prediction>	1
+
+# Test 3: NULL Value Handling
+
+statement ok
+CREATE OR REPLACE TABLE features_with_nulls AS
+SELECT 1 as id, 1.0::FLOAT as f1, 2.0::FLOAT as f2, NULL::FLOAT as f3
+
+# The current implementation should throw an error when a feature is NULL
+statement error
+SELECT infera_predict('linear', f1, f2, f3) FROM features_with_nulls
+
+# Cleanup
+statement ok
+DROP TABLE features
+
+statement ok
+DROP TABLE features_with_nulls
+
+statement ok
+SELECT infera_unload_model('linear')

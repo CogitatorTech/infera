@@ -11,6 +11,22 @@ use std::mem;
 #[cfg(feature = "tract")]
 use tract_onnx::prelude::*;
 
+/// Loads, compiles, and stores an ONNX model.
+///
+/// This function reads an ONNX model from the given path, uses the Tract library
+/// to parse, optimize, and compile it into a runnable plan. It also extracts
+/// metadata like input/output shapes. The resulting `OnnxModel` is then
+/// inserted into the global `MODELS` map.
+///
+/// # Arguments
+///
+/// * `name` - The name to assign to the loaded model.
+/// * `path` - The file system path to the `.onnx` model file.
+///
+/// # Returns
+///
+/// * `Ok(())` on successful loading and compilation.
+/// * `Err(InferaError)` if the model cannot be found, parsed, or compiled.
 #[cfg(feature = "tract")]
 pub(crate) fn load_model_impl(name: &str, path: &str) -> Result<(), InferaError> {
     let model = tract_onnx::onnx()
@@ -48,6 +64,9 @@ pub(crate) fn load_model_impl(name: &str, path: &str) -> Result<(), InferaError>
     Ok(())
 }
 
+/// A stub for `load_model_impl` when the "tract" feature is disabled.
+///
+/// Always returns an `InferaError::FeatureNotEnabled` error.
 #[cfg(not(feature = "tract"))]
 pub(crate) fn load_model_impl(_name: &str, _path: &str) -> Result<(), InferaError> {
     Err(InferaError::FeatureNotEnabled(
@@ -55,6 +74,23 @@ pub(crate) fn load_model_impl(_name: &str, _path: &str) -> Result<(), InferaErro
     ))
 }
 
+/// Runs inference with a given model and input tensor data.
+///
+/// This function retrieves the specified model from the global `MODELS` store,
+/// constructs a Tract tensor from the raw input data, runs the model,
+/// and packages the output into an `InferaInferenceResult`.
+///
+/// # Arguments
+///
+/// * `model_name` - The name of the loaded model to use for inference.
+/// * `data` - A pointer to the raw f32 tensor data.
+/// * `rows` - The number of rows in the input tensor.
+/// * `cols` - The number of columns in the input tensor.
+///
+/// # Returns
+///
+/// * `Ok(InferaInferenceResult)` containing the output tensor data and metadata.
+/// * `Err(InferaError)` if the model is not found or if an error occurs during inference.
 #[cfg(feature = "tract")]
 pub(crate) fn run_inference_impl(
     model_name: &str,
@@ -99,6 +135,9 @@ pub(crate) fn run_inference_impl(
     })
 }
 
+/// A stub for `run_inference_impl` when the "tract" feature is disabled.
+///
+/// Always returns an `InferaError::FeatureNotEnabled` error.
 #[cfg(not(feature = "tract"))]
 pub(crate) fn run_inference_impl(
     _model_name: &str,
@@ -111,6 +150,24 @@ pub(crate) fn run_inference_impl(
     ))
 }
 
+/// Runs inference with a given model and raw BLOB input data.
+///
+/// This function is similar to `run_inference_impl` but takes a raw byte slice (`BLOB`)
+/// as input. It converts the bytes to `f32` values, validates the shape against the
+/// model's expected input, and attempts to infer the batch size for models with
+/// dynamic input dimensions.
+///
+/// # Arguments
+///
+/// * `model_name` - The name of the loaded model to use for inference.
+/// * `blob_data` - A pointer to the raw byte data.
+/// * `blob_len` - The length of the byte data slice.
+///
+/// # Returns
+///
+/// * `Ok(InferaInferenceResult)` containing the output tensor data and metadata.
+/// * `Err(InferaError)` if the model is not found, the blob size is invalid,
+///   the shape does not match, or an error occurs during inference.
 #[cfg(feature = "tract")]
 pub(crate) fn run_inference_blob_impl(
     model_name: &str,
@@ -179,6 +236,9 @@ pub(crate) fn run_inference_blob_impl(
     })
 }
 
+/// A stub for `run_inference_blob_impl` when the "tract" feature is disabled.
+///
+/// Always returns an `InferaError::FeatureNotEnabled` error.
 #[cfg(not(feature = "tract"))]
 pub(crate) fn run_inference_blob_impl(
     _model_name: &str,
@@ -190,6 +250,19 @@ pub(crate) fn run_inference_blob_impl(
     ))
 }
 
+/// Retrieves metadata for a loaded model as a JSON string.
+///
+/// This function looks up the model by name and serializes its metadata
+/// (name, input shape, output shape) into a JSON string.
+///
+/// # Arguments
+///
+/// * `model_name` - The name of the loaded model.
+///
+/// # Returns
+///
+/// * `Ok(String)` containing the JSON metadata.
+/// * `Err(InferaError)` if the model is not found or if JSON serialization fails.
 #[cfg(feature = "tract")]
 pub(crate) fn get_model_metadata_impl(model_name: &str) -> Result<String, InferaError> {
     let models = MODELS.read();
@@ -205,6 +278,9 @@ pub(crate) fn get_model_metadata_impl(model_name: &str) -> Result<String, Infera
     serde_json::to_string(&info).map_err(|e| InferaError::JsonError(e.to_string()))
 }
 
+/// A stub for `get_model_metadata_impl` when the "tract" feature is disabled.
+///
+/// Always returns an `InferaError::FeatureNotEnabled` error.
 #[cfg(not(feature = "tract"))]
 pub(crate) fn get_model_metadata_impl(_model_name: &str) -> Result<String, InferaError> {
     Err(InferaError::FeatureNotEnabled(

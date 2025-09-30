@@ -20,7 +20,7 @@ SELECT infera_get_loaded_models() AS initial_models;
 SELECT '--- Testing Local Model Roundtrip ---';
 
 -- Load the simple linear model.
-SELECT infera_load_model('linear', 'tests/models/linear.onnx') AS loaded;
+SELECT infera_load_model('linear', 'test/models/linear.onnx') AS loaded;
 
 -- Verify the model appears in the list.
 SELECT instr(infera_get_loaded_models(), 'linear') > 0 AS after_load;
@@ -49,11 +49,11 @@ SELECT infera_get_loaded_models() AS after_unload;
 SELECT '--- Testing Autoload Directory ---';
 
 -- Create a temporary directory and copy the model into it.
-.shell mkdir -p tests/temp_models
-.shell cp tests/models/linear.onnx tests/temp_models/
+.shell mkdir -p test/temp_models
+.shell cp test/models/linear.onnx test/temp_models/
 
 -- Run the autoload function.
-SELECT infera_set_autoload_dir('tests/temp_models');
+SELECT infera_set_autoload_dir('test/temp_models');
 
 -- Verify the model was loaded automatically.
 SELECT instr(infera_get_loaded_models(), 'linear') > 0 AS autoloaded_model_is_listed;
@@ -63,7 +63,7 @@ SELECT abs(infera_predict('linear', 1.0, 2.0, 3.0) - 1.75) < 1e-5 AS autoload_pr
 
 -- Clean up.
 SELECT infera_unload_model('linear');
-.shell rm -rf tests/temp_models
+.shell rm -rf test/temp_models
 
 
 .echo off

@@ -9,7 +9,7 @@ SELECT '--- Testing Remote Model Loading ---';
 
 -- Define macros for the model name and URL for clarity.
 CREATE OR REPLACE MACRO model_name() AS 'remote_linear_model';
-CREATE OR REPLACE MACRO model_url() AS 'https://github.com/CogitatorTech/infera/raw/refs/heads/main/tests/models/linear.onnx';
+CREATE OR REPLACE MACRO model_url() AS 'https://github.com/CogitatorTech/infera/raw/refs/heads/main/test/models/linear.onnx';
 
 -- Load the model from the URL.
 SELECT infera_load_model(model_name(), model_url()) AS loaded_from_url;

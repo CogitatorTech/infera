@@ -17,10 +17,25 @@ mod model;
 pub use error::infera_last_error;
 pub use ffi_utils::{infera_free, infera_free_result, InferaInferenceResult};
 
-/// Loads a model from a file or URL.
+/// Loads an ONNX model from a local file path or a remote URL and assigns it a unique name.
+///
+/// If the `path` starts with "http://" or "https://", the model will be downloaded
+/// and cached locally. Otherwise, it will be treated as a local file path.
+///
+/// # Arguments
+///
+/// * `name` - A pointer to a null-terminated C string representing the unique name for the model.
+/// * `path` - A pointer to a null-terminated C string representing the file path or URL of the model.
+///
+/// # Returns
+///
+/// * `0` on success.
+/// * `-1` on failure. Call `infera_last_error()` to get a descriptive error message.
 ///
 /// # Safety
-/// The `name` and `path` pointers must be valid, null-terminated C strings.
+///
+/// * The `name` and `path` pointers must not be null.
+/// * The memory pointed to by `name` and `path` must be valid, null-terminated C strings.
 #[no_mangle]
 pub unsafe extern "C" fn infera_load_model(name: *const c_char, path: *const c_char) -> i32 {
     let result = (|| -> Result<(), error::InferaError> {
@@ -49,10 +64,21 @@ pub unsafe extern "C" fn infera_load_model(name: *const c_char, path: *const c_c
     }
 }
 
-/// Unloads a model.
+/// Unloads a model, freeing its associated resources.
+///
+/// # Arguments
+///
+/// * `name` - A pointer to a null-terminated C string representing the name of the model to unload.
+///
+/// # Returns
+///
+/// * `0` on success.
+/// * `-1` if the model was not found or an error occurred.
 ///
 /// # Safety
-/// The `name` pointer must be a valid, null-terminated C string.
+///
+/// * The `name` pointer must not be null.
+/// * The memory pointed to by `name` must be a valid, null-terminated C string.
 #[no_mangle]
 pub unsafe extern "C" fn infera_unload_model(name: *const c_char) -> i32 {
     let result = (|| -> Result<(), error::InferaError> {
@@ -76,12 +102,29 @@ pub unsafe extern "C" fn infera_unload_model(name: *const c_char) -> i32 {
     }
 }
 
-/// Runs inference on a model with the given input data.
+/// Runs inference on a loaded model with the given input data.
+///
+/// The input data is provided as a raw pointer to a flat array of `f32` values.
+/// The result of the inference is returned in an `InferaInferenceResult` struct.
+/// The caller is responsible for freeing the result using `infera_free_result`.
+///
+/// # Arguments
+///
+/// * `model_name` - A pointer to a null-terminated C string for the model's name.
+/// * `data` - A pointer to the input tensor data, organized as a flat array of `f32`.
+/// * `rows` - The number of rows in the input tensor.
+/// * `cols` - The number of columns in the input tensor.
+///
+/// # Returns
+///
+/// An `InferaInferenceResult` struct containing the output tensor data and metadata.
+/// If an error occurs, the `status` field of the struct will be `-1`.
 ///
 /// # Safety
-/// The `model_name` and `data` pointers must be valid. `model_name` must be a
-/// null-terminated C string. `data` must point to a contiguous block of memory
-/// of size `rows * cols * size_of<f32>()`.
+///
+/// * `model_name` and `data` must not be null.
+/// * `model_name` must point to a valid, null-terminated C string.
+/// * `data` must point to a contiguous block of memory of size `rows * cols * size_of<f32>()`.
 #[no_mangle]
 pub unsafe extern "C" fn infera_predict(
     model_name: *const c_char,
@@ -106,12 +149,29 @@ pub unsafe extern "C" fn infera_predict(
     }
 }
 
-/// Runs inference on a model with input data from a BLOB.
+/// Runs inference on a loaded model with input data from a raw byte `BLOB`.
+///
+/// This function is useful when the input tensor is stored as a `BLOB`. The byte data
+/// is interpreted as a flat array of `f32` values (native-endian). The function
+/// will attempt to infer the batch size based on the model's expected input shape.
+///
+/// # Arguments
+///
+/// * `model_name` - A pointer to a null-terminated C string for the model's name.
+/// * `blob_data` - A pointer to the input data as a raw byte array.
+/// * `blob_len` - The total length of the byte array in `blob_data`.
+///
+/// # Returns
+///
+/// An `InferaInferenceResult` struct containing the output. The caller is responsible
+/// for freeing this result using `infera_free_result`.
 ///
 /// # Safety
-/// The `model_name` and `blob_data` pointers must be valid. `model_name` must be a
-/// null-terminated C string. `blob_data` must point to a contiguous block of
-/// memory of size `blob_len`.
+///
+/// * `model_name` and `blob_data` must not be null.
+/// * `model_name` must point to a valid, null-terminated C string.
+/// * `blob_data` must point to a contiguous block of memory of size `blob_len`.
+/// * `blob_len` must be a multiple of `std::mem::size_of::<f32>()`.
 #[no_mangle]
 pub unsafe extern "C" fn infera_predict_from_blob(
     model_name: *const c_char,
@@ -135,10 +195,24 @@ pub unsafe extern "C" fn infera_predict_from_blob(
     }
 }
 
-/// Gets information about a loaded model.
+/// Retrieves metadata about a specific loaded model as a JSON string.
+///
+/// The returned JSON string includes the model's name, and its input and output shapes.
+///
+/// # Arguments
+///
+/// * `model_name` - A pointer to a null-terminated C string for the model's name.
+///
+/// # Returns
+///
+/// A pointer to a heap-allocated, null-terminated C string containing JSON.
+/// The caller is responsible for freeing this string using `infera_free`.
+/// On error (e.g., model not found), the JSON will contain an "error" key.
 ///
 /// # Safety
-/// The `model_name` pointer must be a valid, null-terminated C string.
+///
+/// * The `model_name` pointer must not be null and must point to a valid C string.
+/// * The returned pointer must be freed with `infera_free` to avoid memory leaks.
 #[no_mangle]
 pub unsafe extern "C" fn infera_get_model_info(model_name: *const c_char) -> *mut c_char {
     let result = (|| -> Result<String, error::InferaError> {
@@ -159,6 +233,16 @@ pub unsafe extern "C" fn infera_get_model_info(model_name: *const c_char) -> *mu
     }
 }
 
+/// Returns a JSON array of the names of all currently loaded models.
+///
+/// # Returns
+///
+/// A pointer to a heap-allocated, null-terminated C string containing a JSON array of strings.
+/// The caller is responsible for freeing this string using `infera_free`.
+///
+/// # Safety
+///
+/// The returned pointer must be freed with `infera_free` to avoid memory leaks.
 #[no_mangle]
 pub extern "C" fn infera_get_loaded_models() -> *mut c_char {
     let models = model::MODELS.read();
@@ -167,6 +251,19 @@ pub extern "C" fn infera_get_loaded_models() -> *mut c_char {
     CString::new(joined).unwrap().into_raw()
 }
 
+/// Returns a JSON string with version and build information about the Infera library.
+///
+/// The JSON object includes the library version, the enabled ONNX backend (e.g., "tract"),
+/// and the directory used for caching remote models.
+///
+/// # Returns
+///
+/// A pointer to a heap-allocated, null-terminated C string containing the version info.
+/// The caller is responsible for freeing this string using `infera_free`.
+///
+/// # Safety
+///
+/// The returned pointer must be freed with `infera_free` to avoid memory leaks.
 #[no_mangle]
 pub extern "C" fn infera_get_version() -> *mut c_char {
     let cache_dir = env::temp_dir().join("infera_cache");
@@ -179,10 +276,26 @@ pub extern "C" fn infera_get_version() -> *mut c_char {
     CString::new(json_str).unwrap_or_default().into_raw()
 }
 
-/// Sets a directory to automatically load models from.
+/// Scans a directory for `.onnx` files and loads them into Infera automatically.
+///
+/// The name for each model is derived from its filename (without the extension).
+///
+/// # Arguments
+///
+/// * `path` - A pointer to a null-terminated C string representing the directory path.
+///
+/// # Returns
+///
+/// A pointer to a heap-allocated C string containing a JSON object with two fields:
+/// * `"loaded"`: A list of model names that were successfully loaded.
+/// * `"errors"`: A list of objects, each detailing a file that failed to load and the reason.
+///
+/// The caller is responsible for freeing this string using `infera_free`.
 ///
 /// # Safety
-/// The `path` pointer must be a valid, null-terminated C string.
+///
+/// * The `path` pointer must not be null and must point to a valid C string.
+/// * The returned pointer must be freed with `infera_free` to avoid memory leaks.
 #[no_mangle]
 pub unsafe extern "C" fn infera_set_autoload_dir(path: *const c_char) -> *mut c_char {
     let result = (|| -> Result<serde_json::Value, error::InferaError> {
@@ -214,13 +327,10 @@ pub unsafe extern "C" fn infera_set_autoload_dir(path: *const c_char) -> *mut c_
         Ok(json!({"loaded": loaded, "errors": errors}))
     })();
 
-    let final_json = match result {
-        Ok(json) => json,
-        Err(e) => {
-            error::set_last_error(&e);
-            json!({"error": e.to_string()})
-        }
-    };
+    let final_json = result.unwrap_or_else(|e| {
+        error::set_last_error(&e);
+        json!({"error": e.to_string()})
+    });
     let json_str = serde_json::to_string(&final_json).unwrap_or_default();
     CString::new(json_str).unwrap_or_default().into_raw()
 }
@@ -249,7 +359,7 @@ mod tests {
     fn test_infera_set_autoload_dir() {
         let dir = tempdir().unwrap();
         let model_path = dir.path().join("linear.onnx");
-        fs::copy("../tests/models/linear.onnx", &model_path).unwrap();
+        fs::copy("../test/models/linear.onnx", &model_path).unwrap();
 
         let path_cstr = CString::new(dir.path().to_str().unwrap()).unwrap();
         let result_ptr = unsafe { infera_set_autoload_dir(path_cstr.as_ptr()) };

@@ -20,7 +20,7 @@ SELECT infera_unload_model('nonexistent_model');
 SELECT '--- Testing Batch Processing and Aggregation ---';
 
 -- Load a model to use for batch tests.
-SELECT infera_load_model('linear', 'tests/models/linear.onnx');
+SELECT infera_load_model('linear', 'test/models/linear.onnx');
 
 -- Create a table with sample feature data, casting to FLOAT.
 CREATE OR REPLACE TABLE features AS

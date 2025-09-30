@@ -1,0 +1,61 @@
+# name: test/sql/test_advanced_features.test
+# group: [infera]
+
+# Tests advanced features like remote model loading and BLOB inputs.
+
+statement ok
+PRAGMA enable_verification
+
+# Test 1: Remote Model Loading
+
+statement ok
+CREATE OR REPLACE MACRO model_name() AS 'remote_linear_model'
+
+statement ok
+CREATE OR REPLACE MACRO model_url() AS 'https://github.com/CogitatorTech/infera/raw/refs/heads/main/test/models/linear.onnx'
+
+statement ok
+SELECT infera_load_model(model_name(), model_url())
+
+query I
+SELECT instr(infera_get_loaded_models(), model_name()) > 0
+----
+true
+
+# Run a prediction to confirm it's functional (y = 1.75 for these features)
+query I
+SELECT abs(infera_predict(model_name(), 1.0, 2.0, 3.0) - 1.75) < 1e-5
+----
+true
+
+statement ok
+SELECT infera_unload_model(model_name())
+
+query I
+SELECT instr(infera_get_loaded_models(), model_name()) = 0
+----
+true
+
+# Test 2: BLOB Input Prediction
+
+statement ok
+SELECT infera_load_model('mobilenet', 'https://huggingface.co/onnxmodelzoo/tf_mobilenetv3_small_075_Opset17/resolve/main/tf_mobilenetv3_small_075_Opset17.onnx')
+
+# Test error handling with an incorrectly sized BLOB
+# This should fail
+statement error
+SELECT infera_predict_from_blob('mobilenet', 'dummy_bytes')
+
+# Test with a correctly sized, zero-filled BLOB
+# Model input is 1*224*224*3 floats. A float is 4 bytes. Total size = 602112 bytes
+query I
+WITH const AS (
+  SELECT CAST(REPEAT(CHR(0), 602112) AS BLOB) AS zero_blob
+)
+SELECT len(infera_predict_from_blob('mobilenet', zero_blob)) > 0
+FROM const
+----
+true
+
+statement ok
+SELECT infera_unload_model('mobilenet')

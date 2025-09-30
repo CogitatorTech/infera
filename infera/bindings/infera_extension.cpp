@@ -23,11 +23,26 @@
 
 namespace duckdb {
 
+/**
+ * @brief Retrieves the last error message from the Infera Rust core.
+ * @return A string containing the error message, or "unknown error" if not set.
+ */
 static std::string GetInferaError() {
   const char *err = infera::infera_last_error();
   return err ? std::string(err) : std::string("unknown error");
 }
 
+/**
+ * @brief Implements the `infera_set_autoload_dir(path)` SQL function.
+ *
+ * This function takes a directory path, passes it to the Rust core to load all
+ * valid ONNX models in that directory, and returns a JSON string with the
+ * results of the operation.
+ *
+ * @param args The input arguments from DuckDB.
+ * @param state The expression state.
+ * @param result The result vector to populate.
+ */
 static void SetAutoloadDir(DataChunk &args, ExpressionState &state, Vector &result) {
   if (args.ColumnCount() != 1) {
     throw InvalidInputException("infera_set_autoload_dir(path) expects exactly 1 argument");
@@ -45,6 +60,16 @@ static void SetAutoloadDir(DataChunk &args, ExpressionState &state, Vector &resu
   infera::infera_free(result_json_c);
 }
 
+/**
+ * @brief Implements the `infera_get_version()` SQL function.
+ *
+ * Fetches version and build information from the Rust core and returns it as a
+ * JSON string.
+ *
+ * @param args The input arguments from DuckDB.
+ * @param state The expression state.
+ * @param result The result vector to populate.
+ */
 static void GetVersion(DataChunk &args, ExpressionState &state, Vector &result) {
   char *info_json_c = infera::infera_get_version();
   result.SetVectorType(VectorType::CONSTANT_VECTOR);
@@ -53,6 +78,16 @@ static void GetVersion(DataChunk &args, ExpressionState &state, Vector &result) 
   infera::infera_free(info_json_c);
 }
 
+/**
+ * @brief Implements the `infera_load_model(name, path)` SQL function.
+ *
+ * Takes a model name and a file path/URL, passing them to the Rust core to
+ * load an ONNX model.
+ *
+ * @param args The input arguments from DuckDB.
+ * @param state The expression state.
+ * @param result The result vector to populate.
+ */
 static void LoadModel(DataChunk &args, ExpressionState &state, Vector &result) {
   if (args.ColumnCount() != 2) {
     throw InvalidInputException("infera_load_model(model_name, path) expects exactly 2 arguments");
@@ -78,6 +113,15 @@ static void LoadModel(DataChunk &args, ExpressionState &state, Vector &result) {
   ConstantVector::SetNull(result, false);
 }
 
+/**
+ * @brief Implements the `infera_unload_model(name)` SQL function.
+ *
+ * Unloads a model from the Infera engine by its name.
+ *
+ * @param args The input arguments from DuckDB.
+ * @param state The expression state.
+ * @param result The result vector to populate.
+ */
 static void UnloadModel(DataChunk &args, ExpressionState &state, Vector &result) {
   if (args.ColumnCount() != 1) {
     throw InvalidInputException("infera_unload_model(model_name) expects exactly 1 argument");
@@ -98,6 +142,15 @@ static void UnloadModel(DataChunk &args, ExpressionState &state, Vector &result)
   ConstantVector::SetNull(result, false);
 }
 
+/**
+ * @brief Extracts numerical features from a DataChunk.
+ *
+ * Iterates over the input DataChunk (skipping the first column, which is the
+ * model name) and converts all values to floats, storing them in a vector.
+ *
+ * @param args The input DataChunk containing the features.
+ * @param features The output vector to store the extracted float features.
+ */
 static void ExtractFeatures(DataChunk &args, std::vector<float> &features) {
   const idx_t batch_size = args.size();
   const idx_t feature_count = args.ColumnCount() - 1;
@@ -122,6 +175,16 @@ static void ExtractFeatures(DataChunk &args, std::vector<float> &features) {
   }
 }
 
+/**
+ * @brief Validates the input arguments and extracts the model name.
+ *
+ * Checks that there are at least two arguments and that the first argument (the
+ * model name) is not null.
+ *
+ * @param args The input DataChunk.
+ * @param func_name The name of the calling function for error messages.
+ * @return The model name as a string.
+ */
 static std::string ValidateAndGetModelName(DataChunk &args, const std::string &func_name) {
   if (args.ColumnCount() < 2) {
     throw InvalidInputException(func_name + "(model_name, feature1, ...) requires at least 2 arguments");
@@ -133,6 +196,16 @@ static std::string ValidateAndGetModelName(DataChunk &args, const std::string &f
   return model_name_val.ToString();
 }
 
+/**
+ * @brief Implements the `infera_predict(name, ...features)` SQL function.
+ *
+ * Extracts features, runs inference using the Rust core, and populates the
+ * result vector with a single float prediction per row.
+ *
+ * @param args The input arguments from DuckDB.
+ * @param state The expression state.
+ * @param result The result vector to populate.
+ */
 static void Predict(DataChunk &args, ExpressionState &state, Vector &result) {
   if (args.size() == 0) { return; }
   std::string model_name_str = ValidateAndGetModelName(args, "infera_predict");
@@ -160,6 +233,15 @@ static void Predict(DataChunk &args, ExpressionState &state, Vector &result) {
   infera::infera_free_result(res);
 }
 
+/**
+ * @brief Implements the `infera_predict_from_blob(name, blob)` SQL function.
+ *
+ * Runs inference on raw blob data. The result is a list of floats.
+ *
+ * @param args The input arguments from DuckDB.
+ * @param state The expression state.
+ * @param result The result vector to populate.
+ */
 static void PredictFromBlob(DataChunk &args, ExpressionState &state, Vector &result) {
   if (args.ColumnCount() != 2) {
     throw InvalidInputException("infera_predict_from_blob(model_name, input_blob) requires 2 arguments");
@@ -193,6 +275,15 @@ static void PredictFromBlob(DataChunk &args, ExpressionState &state, Vector &res
   result.Verify(args.size());
 }
 
+/**
+ * @brief Implements the `infera_get_loaded_models()` SQL function.
+ *
+ * Returns a JSON array of the names of all currently loaded models.
+ *
+ * @param args The input arguments from DuckDB.
+ * @param state The expression state.
+ * @param result The result vector to populate.
+ */
 static void GetLoadedModels(DataChunk &args, ExpressionState &state, Vector &result) {
   char *models_json = infera::infera_get_loaded_models();
   result.SetVectorType(VectorType::CONSTANT_VECTOR);
@@ -201,6 +292,16 @@ static void GetLoadedModels(DataChunk &args, ExpressionState &state, Vector &res
   infera::infera_free(models_json);
 }
 
+/**
+ * @brief Implements the `infera_predict_multi(name, ...features)` SQL function.
+ *
+ * Similar to `Predict`, but returns the model's output as a JSON-encoded
+ * string array, supporting models with multi-value outputs.
+ *
+ * @param args The input arguments from DuckDB.
+ * @param state The expression state.
+ * @param result The result vector to populate.
+ */
 static void PredictMulti(DataChunk &args, ExpressionState &state, Vector &result) {
   if (args.size() == 0) { return; }
   std::string model_name_str = ValidateAndGetModelName(args, "infera_predict_multi");
@@ -239,6 +340,15 @@ static void PredictMulti(DataChunk &args, ExpressionState &state, Vector &result
   infera::infera_free_result(res);
 }
 
+/**
+ * @brief Implements the `infera_get_model_info(name)` SQL function.
+ *
+ * Retrieves metadata for a specific model and returns it as a JSON string.
+ *
+ * @param args The input arguments from DuckDB.
+ * @param state The expression state.
+ * @param result The result vector to populate.
+ */
 static void GetModelInfo(DataChunk &args, ExpressionState &state, Vector &result) {
   if (args.ColumnCount() != 1) {
     throw InvalidInputException("infera_get_model_info(model_name) expects exactly 1 argument");
@@ -257,6 +367,14 @@ static void GetModelInfo(DataChunk &args, ExpressionState &state, Vector &result
   infera::infera_free(json_meta);
 }
 
+/**
+ * @brief Registers all the Infera functions with DuckDB.
+ *
+ * This internal helper function is called by the extension loading mechanism to
+ * register all scalar functions.
+ *
+ * @param loader The extension loader provided by DuckDB.
+ */
 static void LoadInternal(ExtensionLoader &loader) {
   loader.RegisterFunction(ScalarFunction("infera_load_model", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN, LoadModel));
   loader.RegisterFunction(ScalarFunction("infera_unload_model", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, UnloadModel));

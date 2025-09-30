@@ -13,18 +13,18 @@
 [![Docs](https://img.shields.io/badge/docs-view-blue?style=flat&labelColor=282c34&logo=read-the-docs)](https://github.com/CogitatorTech/infera/tree/main/docs)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-007ec6?style=flat&labelColor=282c34&logo=open-source-initiative)](https://github.com/CogitatorTech/infera)
 
-Use machine learning models directly in your queries in DuckDB
+In-Database Machine Learning for DuckDB
 
 </div>
 
 ---
 
-Infera is DuckDB extension that lets you use machine learning (ML) models directly in SQL queries to perform inference
+Infera is DuckDB extension that allows you use machine learning (ML) models directly in SQL queries to perform inference
 on data stored in DuckDB tables.
 It is developed in Rust and uses [Tract](https://github.com/snipsco/tract) as the backend inference engine.
 Infera supports loading and running models in [ONNX](https://onnx.ai/) format.
-Check out the [ONNX Model Zoo](https://huggingface.co/onnxmodelzoo) repositors on Hugging Face for a very large collection of
-ready-to-use models that can be used with Infera.
+Check out the [ONNX Model Zoo](https://huggingface.co/onnxmodelzoo) repositors on Hugging Face for a very large
+collection of ready-to-use models that can be used with Infera.
 
 ### Motivation
 
@@ -61,15 +61,16 @@ See the [ROADMAP.md](ROADMAP.md) for the list of implemented and planned feature
 LOAD
 infera;
 
--- 2. Load local ONNX model
-SELECT infera_load_model('linear_model', 'tests/models/linear.onnx');
+-- 2. Load a simple linear model from a remote URL
+SELECT infera_load_model('linear_model',
+                         'https://github.com/CogitatorTech/infera/raw/refs/heads/main/test/models/linear.onnx');
 
 -- 3. Run a prediction using a very simple linear model
--- Model is y = 2*x1 - 1*x2 + 0.5*x3 + 0.25
+-- Model: y = 2*x1 - 1*x2 + 0.5*x3 + 0.25
 SELECT infera_predict('linear_model', 1.0, 2.0, 3.0);
 -- Expected output: 1.75
 
--- 4. Unload the model to free memory
+-- 4. Unload the model when we're done with it
 SELECT infera_unload_model('linear_model');
 ````
 
@@ -77,7 +78,11 @@ SELECT infera_unload_model('linear_model');
 
 ### Documentation
 
-Check out the [docs](docs/README.md) directory for the API documentation and usage examples.
+Check out the [docs](docs/README.md) directory for the API documentation, how to build Infera from source, and more.
+
+#### Examples
+
+Check out the [examples](docs/examples) directory for SQL scripts that show how to use Infera.
 
 ---
 

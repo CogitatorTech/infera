@@ -1,0 +1,100 @@
+# name: test/sql/test_core_functionality.test
+# group: [infera]
+
+# Tests the core, end-to-end functionality of the extension.
+
+statement ok
+PRAGMA enable_verification
+
+# Test 1: Version and Initial State
+
+query I
+SELECT infera_get_version() IS NOT NULL
+----
+true
+
+query I
+SELECT infera_get_loaded_models()
+----
+(empty)
+
+# Test 2: Local Model Roundtrip (Load -> Info -> Predict -> Unload)
+
+statement ok
+SELECT infera_load_model('linear', 'test/models/linear.onnx')
+
+query I
+SELECT instr(infera_get_loaded_models(), 'linear') > 0
+----
+true
+
+query I
+SELECT infera_get_model_info('linear') IS NOT NULL
+----
+true
+
+query I
+SELECT position('"input_shape":[1,3]' IN infera_get_model_info('linear')) > 0
+----
+true
+
+# Run deterministic predictions. Model is y = 2*x1 - 1*x2 + 0.5*x3 + 0.25
+# For (1.0, 2.0, 3.0), expected y = 1.75
+query R
+SELECT infera_predict('linear', 1.0, 2.0, 3.0)
+----
+1.75
+
+query I
+SELECT abs(infera_predict('linear', 1.0, 2.0, 3.0) - 1.75) < 1e-5
+----
+true
+
+query I
+SELECT instr(infera_predict_multi('linear', 1.0, 2.0, 3.0), '1.75') > 0
+----
+true
+
+statement ok
+SELECT infera_unload_model('linear')
+
+query I
+SELECT infera_get_loaded_models()
+----
+(empty)
+
+# Test 3: Autoload Directory
+
+statement ok
+CREATE TABLE temp_setup AS SELECT system('mkdir -p __TEST_DIR__/temp_models')
+
+statement ok
+CREATE TABLE temp_copy AS SELECT system('cp test/models/linear.onnx __TEST_DIR__/temp_models/')
+
+statement ok
+SELECT infera_set_autoload_dir('__TEST_DIR__/temp_models')
+
+query I
+SELECT instr(infera_get_loaded_models(), 'linear') > 0
+----
+true
+
+query I
+SELECT abs(infera_predict('linear', 1.0, 2.0, 3.0) - 1.75) < 1e-5
+----
+true
+
+statement ok
+SELECT infera_unload_model('linear')
+
+statement ok
+CREATE TABLE temp_cleanup AS SELECT system('rm -rf __TEST_DIR__/temp_models')
+
+statement ok
+DROP TABLE temp_setup
+
+statement ok
+DROP TABLE temp_copy
+
+statement ok
+DROP TABLE temp_cleanup

@@ -26,6 +26,7 @@ hex = "0.4"
 
 [dev-dependencies]
 tempfile = "3.10"
+mockito = "1.7.0"
 
 [profile.release]
 opt-level = 3
