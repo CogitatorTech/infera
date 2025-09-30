@@ -73,6 +73,11 @@ make release
 3. Run the following SQL commands in the shell to try Infera out:
 
 ```sql
+-- Normally, we need to load the extension first,
+-- but the `duckdb` binary that we built in the previous step
+-- already has Infera statically linked to it.
+-- So, we don't need to load the extension explicitly.
+
 -- 1. Load a simple linear model from a remote URL
 select infera_load_model('linear_model',
                          'https://github.com/CogitatorTech/infera/raw/refs/heads/main/test/models/linear.onnx');
@@ -91,12 +96,12 @@ select infera_get_version();
 
 > [!NOTE]
 > After building from source, the Infera binary will be `build/release/extension/infera/infera.duckdb_extension`.
-> You can load it using the `load 'build/release/extension/infera/infera.duckdb_extension'` command in DuckDB shell.
+> You can load it using the `load 'build/release/extension/infera/infera.duckdb_extension';` in DuckDB shell.
 > Note that the extension binary will only work with the DuckDB version that it was built against.
 > At the moment, Infera is not available as
 > a [DuckDB community extension](https://duckdb.org/community_extensions/list_of_extensions).
-> Nevertheless, you can still use Infera by building it from source or downloading a pre-built binary from
-> the [releases page](https://github.com/CogitatorTech/infera/releases).
+> Nevertheless, you can still use Infera by building it from source yourself, or downloading pre-built binaries from
+> the [releases page](https://github.com/CogitatorTech/infera/releases) for your platform.
 > Please check the [this page](https://duckdb.org/docs/stable/extensions/installing_extensions.html) for more details on
 > how to use extensions in DuckDB.
 
