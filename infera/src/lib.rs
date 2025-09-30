@@ -224,3 +224,156 @@ pub unsafe extern "C" fn infera_set_autoload_dir(path: *const c_char) -> *mut c_
     let json_str = serde_json::to_string(&final_json).unwrap_or_default();
     CString::new(json_str).unwrap_or_default().into_raw()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::CString;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_infera_get_version() {
+        let version_ptr = infera_get_version();
+        let version_json = unsafe { CStr::from_ptr(version_ptr).to_str().unwrap() };
+        let version_data: serde_json::Value = serde_json::from_str(version_json).unwrap();
+
+        assert!(version_data["version"].is_string());
+        assert!(version_data["onnx_backend"].is_string());
+        assert!(version_data["model_cache_dir"].is_string());
+
+        unsafe { infera_free(version_ptr) };
+    }
+
+    #[test]
+    fn test_infera_set_autoload_dir() {
+        let dir = tempdir().unwrap();
+        let model_path = dir.path().join("linear.onnx");
+        fs::copy("../tests/models/linear.onnx", &model_path).unwrap();
+
+        let path_cstr = CString::new(dir.path().to_str().unwrap()).unwrap();
+        let result_ptr = unsafe { infera_set_autoload_dir(path_cstr.as_ptr()) };
+        let result_json = unsafe { CStr::from_ptr(result_ptr).to_str().unwrap() };
+        let result_data: serde_json::Value = serde_json::from_str(result_json).unwrap();
+
+        assert_eq!(result_data["loaded"].as_array().unwrap().len(), 1);
+        assert_eq!(result_data["loaded"][0], "linear");
+        assert_eq!(result_data["errors"].as_array().unwrap().len(), 0);
+
+        unsafe { infera_free(result_ptr) };
+    }
+
+    #[test]
+    fn test_infera_set_autoload_dir_non_existent() {
+        let dir = tempdir().unwrap();
+        let non_existent_path = dir.path().join("non_existent");
+        let path_cstr = CString::new(non_existent_path.to_str().unwrap()).unwrap();
+        let result_ptr = unsafe { infera_set_autoload_dir(path_cstr.as_ptr()) };
+        let result_json = unsafe { CStr::from_ptr(result_ptr).to_str().unwrap() };
+        let result_data: serde_json::Value = serde_json::from_str(result_json).unwrap();
+
+        assert!(result_data["error"].is_string());
+
+        unsafe { infera_free(result_ptr) };
+    }
+
+    #[test]
+    fn test_infera_set_autoload_dir_invalid_model() {
+        let dir = tempdir().unwrap();
+        let model_path = dir.path().join("invalid.onnx");
+        fs::write(&model_path, "invalid onnx data").unwrap();
+
+        let path_cstr = CString::new(dir.path().to_str().unwrap()).unwrap();
+        let result_ptr = unsafe { infera_set_autoload_dir(path_cstr.as_ptr()) };
+        let result_json = unsafe { CStr::from_ptr(result_ptr).to_str().unwrap() };
+        let result_data: serde_json::Value = serde_json::from_str(result_json).unwrap();
+
+        assert_eq!(result_data["loaded"].as_array().unwrap().len(), 0);
+        assert_eq!(result_data["errors"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            result_data["errors"][0]["file"],
+            model_path.to_str().unwrap()
+        );
+
+        unsafe { infera_free(result_ptr) };
+    }
+
+    #[test]
+    fn test_ffi_null_pointers() {
+        let model_name = CString::new("test").unwrap();
+        let path = CString::new("path").unwrap();
+        let null_ptr = std::ptr::null();
+
+        // Test infera_load_model
+        unsafe {
+            assert_eq!(infera_load_model(null_ptr, path.as_ptr()), -1);
+            let error = CStr::from_ptr(infera_last_error());
+            assert!(error.to_str().unwrap().contains("Null pointer passed"));
+
+            assert_eq!(infera_load_model(model_name.as_ptr(), null_ptr), -1);
+            let error = CStr::from_ptr(infera_last_error());
+            assert!(error.to_str().unwrap().contains("Null pointer passed"));
+        }
+
+        // Test infera_unload_model
+        unsafe {
+            assert_eq!(infera_unload_model(null_ptr), -1);
+            let error = CStr::from_ptr(infera_last_error());
+            assert!(error.to_str().unwrap().contains("Null pointer passed"));
+        }
+
+        // Test infera_predict
+        let data: [f32; 1] = [0.0];
+        unsafe {
+            let result = infera_predict(null_ptr, data.as_ptr(), 1, 1);
+            assert_eq!(result.status, -1);
+            let error = CStr::from_ptr(infera_last_error());
+            assert!(error.to_str().unwrap().contains("Null pointer passed"));
+
+            let result = infera_predict(model_name.as_ptr(), std::ptr::null(), 1, 1);
+            assert_eq!(result.status, -1);
+            let error = CStr::from_ptr(infera_last_error());
+            assert!(error.to_str().unwrap().contains("Null pointer passed"));
+        }
+
+        // Test infera_predict_from_blob
+        let blob: [u8; 4] = [0; 4];
+        unsafe {
+            let result = infera_predict_from_blob(null_ptr, blob.as_ptr(), 4);
+            assert_eq!(result.status, -1);
+            let error = CStr::from_ptr(infera_last_error());
+            assert!(error.to_str().unwrap().contains("Null pointer passed"));
+
+            let result = infera_predict_from_blob(model_name.as_ptr(), std::ptr::null(), 4);
+            assert_eq!(result.status, -1);
+            let error = CStr::from_ptr(infera_last_error());
+            assert!(error.to_str().unwrap().contains("Null pointer passed"));
+        }
+
+        // Test infera_get_model_info
+        unsafe {
+            let info_ptr = infera_get_model_info(null_ptr);
+            let info_json = CStr::from_ptr(info_ptr).to_str().unwrap();
+            let info_data: serde_json::Value = serde_json::from_str(info_json).unwrap();
+            assert!(info_data["error"].is_string());
+            assert!(info_data["error"]
+                .as_str()
+                .unwrap()
+                .contains("Null pointer passed"));
+            infera_free(info_ptr);
+        }
+
+        // Test infera_set_autoload_dir
+        unsafe {
+            let result_ptr = infera_set_autoload_dir(null_ptr);
+            let result_json = CStr::from_ptr(result_ptr).to_str().unwrap();
+            let result_data: serde_json::Value = serde_json::from_str(result_json).unwrap();
+            assert!(result_data["error"].is_string());
+            assert!(result_data["error"]
+                .as_str()
+                .unwrap()
+                .contains("Null pointer passed"));
+            infera_free(result_ptr);
+        }
+    }
+}
