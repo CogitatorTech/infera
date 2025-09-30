@@ -19,4 +19,3 @@ select '## predict (single-output API) will raise mismatch error if executed';
 select '## cleanup';
 select infera_unload_model('multi_output') as unloaded_multi;
 .echo off
-

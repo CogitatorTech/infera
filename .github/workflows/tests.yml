@@ -5,14 +5,19 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  rust-tests:
+    name: Rust Tests and Code Coverage
     runs-on: ubuntu-latest
-
+    env:
+      CARGO_TERM_COLOR: always
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -22,17 +27,55 @@ jobs:
       - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update && sudo apt-get upgrade -y
-          sudo apt-get install -y gcc curl pkg-config libssl-dev make
-          cargo install cargo-tarpaulin
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            infera/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-      - name: Run Tests and Generate Coverage Report
-        run: make rust-coverage # Generates a coverage report for Infera crate
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc curl pkg-config libssl-dev make
+          cargo install cargo-tarpaulin --locked || true
+
+      - name: Run Rust Tests
+        run: |
+          make rust-test
+
+      - name: Generate Coverage (using Tarpaulin)
+        run: |
+          make rust-coverage
 
       - name: Upload Coverage Reports to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
         continue-on-error: false
+
+  sqllogictest:
+    name: Sqllogicest Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc curl pkg-config libssl-dev make
+
+      - name: Build Extension & Run SQL Tests
+        run: |
+          make release
+          make test

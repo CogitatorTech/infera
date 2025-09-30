@@ -1,4 +1,4 @@
-name: Run Linters
+name: Run Rust Linters
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  lint:
+  lints:
     runs-on: ubuntu-latest
 
     steps:

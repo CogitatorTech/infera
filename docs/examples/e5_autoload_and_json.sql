@@ -19,4 +19,3 @@ select '## cleanup';
 select infera_unload_model('linear') as unload_linear;
 select infera_unload_model('multi_output') as unload_multi_output;
 .echo off
-

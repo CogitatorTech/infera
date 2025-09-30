@@ -1,7 +1,9 @@
-name: Build Extensions
+name: Build Extension Binaries
 on:
-  pull_request:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
@@ -11,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  duckdb-next-build:
+  duckdb-next-stable-build:
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
       duckdb_version: main

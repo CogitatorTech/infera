@@ -21,4 +21,3 @@ select len(infera_predict_from_blob('mobilenet', zero_blob)) as output_len from 
 select '## cleanup';
 select infera_unload_model('mobilenet') as mobilenet_unloaded;
 .echo off
-
