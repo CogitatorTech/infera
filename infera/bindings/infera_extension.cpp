@@ -133,12 +133,15 @@ static void UnloadModel(DataChunk &args, ExpressionState &state, Vector &result)
   }
   std::string model_name_str = model_name.ToString();
   int rc = infera::infera_unload_model(model_name_str.c_str());
-  bool success = (rc == 0);
-  if (!success) {
-      throw InvalidInputException("Failed to unload model '" + model_name_str + "': " + GetInferaError());
+  if (rc != 0) {
+    std::string err = GetInferaError();
+    // Treat model-not-found as benign idempotent success returning true
+    if (err.rfind("Model not found:", 0) != 0) {
+      throw InvalidInputException("Failed to unload model '" + model_name_str + "': " + err);
+    }
   }
   result.SetVectorType(VectorType::CONSTANT_VECTOR);
-  ConstantVector::GetData<bool>(result)[0] = success;
+  ConstantVector::GetData<bool>(result)[0] = true; // always true for idempotency & verification stability
   ConstantVector::SetNull(result, false);
 }
 

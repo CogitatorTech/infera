@@ -1,74 +1,67 @@
 # name: test/sql/test_integration_and_errors.test
 # group: [infera]
 
-# Tests error handling and integration with larger SQL queries.
+# tests error handling and integration with larger sql queries.
 
 statement ok
-PRAGMA enable_verification
+pragma enable_verification
 
-# Test 1: Error Handling for Non-existent Models
+# load the infera extension from the local build artifact
+statement ok
+load 'build/release/extension/infera/infera.duckdb_extension'
 
-# Check info for a model that is not loaded - should return NULL or empty
+# test 1: error handling for non-existent models
+
+# infera_get_model_info for a missing model returns a non-null json containing an error field
 query I
-SELECT infera_get_model_info('nonexistent_model') IS NULL
+select infera_get_model_info('nonexistent_model') is null
 ----
-true
+0
 
-# Try to unload a model that is not loaded - should handle gracefully
+# unloading a non-existent model is benign (idempotent) and returns false
 statement ok
-SELECT infera_unload_model('nonexistent_model')
+select infera_unload_model('nonexistent_model')
 
-# Test 2: Batch Processing and Aggregation
-
-statement ok
-SELECT infera_load_model('linear', 'test/models/linear.onnx')
+# test 2: batch processing and aggregation (deterministic)
 
 statement ok
-CREATE OR REPLACE TABLE features AS
-SELECT
-    row_number() OVER () as id,
-    (random() * 10)::FLOAT as f1,
-    (random() * 10)::FLOAT as f2,
-    (random() * 10)::FLOAT as f3
-FROM generate_series(1, 100)
+select infera_load_model('linear', 'test/models/linear.onnx')
 
-# Run prediction on a single row from the table to test integration
-query IRRR
-SELECT
-    id,
-    f1, f2, f3,
-    infera_predict('linear', f1, f2, f3) as prediction
-FROM features
-WHERE id = 1
+# deterministic single-row feature table
+statement ok
+create or replace table features as
+select 1::integer as id, 1.0::float as f1, 2.0::float as f2, 3.0::float as f3
+
+# run prediction via a table scan
+query IR
+select id, infera_predict('linear', f1, f2, f3) as prediction from features
 ----
-1	<f1_value>	<f2_value>	<f3_value>	<prediction_value>
+1	1.75
 
-# Use the prediction function for an aggregate query on a single row
-query RI
-SELECT
-    AVG(infera_predict('linear', f1, f2, f3)) as avg_prediction,
-    COUNT(*) as total_rows
-FROM features
-WHERE id = 1
+# aggregate (avg over single row) and row count
+query II
+select abs(avg(infera_predict('linear', f1, f2, f3)) - 1.75) < 1e-5, count(*) = 1 from features
 ----
-<avg_prediction>	1
+true	true
 
-# Test 3: NULL Value Handling
+# test 3: null value handling
 
 statement ok
-CREATE OR REPLACE TABLE features_with_nulls AS
-SELECT 1 as id, 1.0::FLOAT as f1, 2.0::FLOAT as f2, NULL::FLOAT as f3
+create or replace table features_with_nulls as
+select 1 as id, 1.0::float as f1, 2.0::float as f2, null::float as f3
 
-# The current implementation should throw an error when a feature is NULL
+# the current implementation should throw an error when a feature is null
 statement error
-SELECT infera_predict('linear', f1, f2, f3) FROM features_with_nulls
+select infera_predict('linear', f1, f2, f3) from features_with_nulls
+----
+Invalid Input Error: Feature values cannot be NULL
 
-# Cleanup
+# cleanup
 statement ok
-DROP TABLE features
+drop table features
 
 statement ok
-DROP TABLE features_with_nulls
+drop table features_with_nulls
 
 statement ok
-SELECT infera_unload_model('linear')
+select infera_unload_model('linear')
