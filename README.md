@@ -73,25 +73,37 @@ make release
 3. Run the following SQL commands in the shell to try Infera out:
 
 ```sql
--- 1. Load the extension (optional when building from source)
-load 'build/release/extension/infera/infera.duckdb_extension'
-load infera;
+-- Normally, we need to load the extension first,
+-- but the `duckdb` binary that we built in the previous step
+-- already has Infera statically linked to it.
+-- So, we don't need to load the extension explicitly.
 
--- 2. Load a simple linear model from a remote URL
+-- 1. Load a simple linear model from a remote URL
 select infera_load_model('linear_model',
                          'https://github.com/CogitatorTech/infera/raw/refs/heads/main/test/models/linear.onnx');
 
--- 3. Run a prediction using a very simple linear model
+-- 2. Run a prediction using a very simple linear model
 -- Model: y = 2*x1 - 1*x2 + 0.5*x3 + 0.25
 select infera_predict('linear_model', 1.0, 2.0, 3.0);
 -- Expected output: 1.75
 
--- 4. Unload the model when we're done with it
+-- 3. Unload the model when we're done with it
 select infera_unload_model('linear_model');
 
--- 5. Check the Infera version
+-- 4. Check the Infera version
 select infera_get_version();
 ````
+
+> [!NOTE]
+> After building from source, the Infera binary will be `build/release/extension/infera/infera.duckdb_extension`.
+> You can load it using the `load 'build/release/extension/infera/infera.duckdb_extension';` in DuckDB shell.
+> Note that the extension binary will only work with the DuckDB version that it was built against.
+> At the moment, Infera is not available as
+> a [DuckDB community extension](https://duckdb.org/community_extensions/list_of_extensions).
+> Nevertheless, you can still use Infera by building it from source yourself, or downloading pre-built binaries from
+> the [releases page](https://github.com/CogitatorTech/infera/releases) for your platform.
+> Please check the [this page](https://duckdb.org/docs/stable/extensions/installing_extensions.html) for more details on
+> how to use extensions in DuckDB.
 
 ---
 
