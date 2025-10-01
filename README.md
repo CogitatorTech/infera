@@ -94,7 +94,7 @@ select infera_unload_model('linear_model');
 select infera_get_version();
 ````
 
-[![asciicast](https://asciinema.org/a/745806.svg)](https://asciinema.org/a/745806)
+[![Simple Demo 1](https://asciinema.org/a/745806.svg)](https://asciinema.org/a/745806)
 
 > [!NOTE]
 > After building from source, the Infera binary will be `build/release/extension/infera/infera.duckdb_extension`.
