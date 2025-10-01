@@ -6,7 +6,6 @@ EXT_NAME := infera
 RUST_LIB := infera/target/release/$(EXT_NAME).a
 DUCKDB_SRCDIR := ./external/duckdb/
 EXT_CONFIG := ${PROJ_DIR}extension_config.cmake
-TESTS_DIR := tests
 EXAMPLES_DIR := docs/examples
 SHELL := /bin/bash
 PYTHON := python3
