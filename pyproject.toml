@@ -2,11 +2,6 @@
 name = "infera"
 version = "0.1.0"
 description = "Python environment for the Infera DuckDB extension"
-readme = "README.md"
-license = { text = "MIT OR Apache-2.0" }
-authors = [
-    { name = "Hassan Abedi", email = "hassan.abedi.t+infera@gmail.com" }
-]
 
 requires-python = ">=3.10,<4.0"
 dependencies = [
