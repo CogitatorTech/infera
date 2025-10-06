@@ -137,7 +137,7 @@ You also need to have Rust (nightly) and Cargo installed via `rustup`.
    ./build/release/duckdb
    ```
    The Infera extension will be automatically available, and you can start using the `infera_*` functions right away
-   without needing to run the `LOAD` command.
+   without needing to run the `load` command.
 
 > [!NOTE]
 > After a successful build, you will find the following files in the `build/release/` directory:
