@@ -100,7 +100,7 @@ select infera_set_autoload_dir('path/to/your/models');
 ### Building Infera from Source
 
 To build Infera from source, you need to have GNU Make, CMake, and a C++ compiler (like GCC or Clang) installed.
-You also need to have Rust (nightly) and Cargo installed via `rustup`.
+You also need to have Rust (nightly version) and Cargo installed.
 
 1. **Clone the repository:**
 
