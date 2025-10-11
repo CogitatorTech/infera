@@ -382,7 +382,7 @@ static void LoadInternal(ExtensionLoader &loader) {
   loader.RegisterFunction(ScalarFunction("infera_load_model", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN, LoadModel));
   loader.RegisterFunction(ScalarFunction("infera_unload_model", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, UnloadModel));
 
-  const idx_t MAX_FEATURES = 63;
+  const idx_t MAX_FEATURES = 127;
   for (idx_t feature_count = 1; feature_count <= MAX_FEATURES; feature_count++) {
     vector<LogicalType> arg_types;
     arg_types.reserve(feature_count + 1);
