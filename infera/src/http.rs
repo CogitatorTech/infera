@@ -57,8 +57,10 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
     })();
 
     if result.is_err() {
-        // Attempt to clean up the partial file, but don't worry if it fails.
-        let _ = fs::remove_file(&temp_path);
+        if temp_path.exists() {
+            // Attempt to clean up the partial file, but don't worry if it fails.
+            let _ = fs::remove_file(&temp_path);
+        }
     }
 
     result
@@ -68,6 +70,41 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
 mod tests {
     use super::*;
     use mockito::Server;
+    use std::thread;
+    use tiny_http::{Header, Response, Server as TinyServer};
+
+    #[test]
+    fn test_handle_remote_model_cleanup_on_incomplete_download() {
+        let server = TinyServer::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let model_url = format!("http://127.0.0.1:{}/incomplete_model.onnx", port);
+
+        let server_handle = thread::spawn(move || {
+            if let Ok(request) = server.recv() {
+                let mut response = Response::from_string("incomplete data");
+                let header = Header::from_bytes(&b"Content-Length"[..], &b"100"[..]).unwrap();
+                response.add_header(header);
+                let _ = request.respond(response);
+            }
+        });
+
+        // The download should fail because the response body is shorter than the content-length.
+        let result = handle_remote_model(&model_url);
+        assert!(result.is_err());
+
+        // Ensure no partial or final file is left in the cache.
+        let cache_dir = env::temp_dir().join("infera_cache");
+        let mut hasher = Sha256::new();
+        hasher.update(model_url.as_bytes());
+        let hash_hex = hex::encode(hasher.finalize());
+        let cached_path = cache_dir.join(format!("{}.onnx", hash_hex));
+        let temp_path = cached_path.with_extension("onnx.part");
+
+        assert!(!cached_path.exists(), "Final cache file should not exist");
+        assert!(!temp_path.exists(), "Partial file should be cleaned up");
+
+        server_handle.join().unwrap();
+    }
 
     #[test]
     fn test_handle_remote_model_download_error() {
