@@ -1,0 +1,5 @@
+-- Test that infera_get_model_info returns an error for a non-existent model
+statement error
+SELECT infera_get_model_info('non_existent_model');
+----
+Failed to get info for model 'non_existent_model'

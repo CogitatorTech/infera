@@ -364,6 +364,10 @@ static void GetModelInfo(DataChunk &args, ExpressionState &state, Vector &result
   std::string model_name_str = model_name.ToString();
   char *json_meta = infera::infera_get_model_info(model_name_str.c_str());
 
+  if (json_meta == nullptr) {
+    throw InvalidInputException("Failed to get info for model '" + model_name_str + "': " + GetInferaError());
+  }
+
   result.SetVectorType(VectorType::CONSTANT_VECTOR);
   ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, json_meta);
   ConstantVector::SetNull(result, false);
