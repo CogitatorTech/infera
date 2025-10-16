@@ -6,7 +6,42 @@ use sha2::{Digest, Sha256};
 use std::env;
 use std::fs::{self, File};
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// A guard that guarantees a temporary file is deleted when it goes out of scope.
+/// This is used to implement a panic-safe cleanup of partial downloads.
+struct TempFileGuard<'a> {
+    path: &'a Path,
+    committed: bool,
+}
+
+impl<'a> TempFileGuard<'a> {
+    /// Creates a new guard for the given path.
+    fn new(path: &'a Path) -> Self {
+        Self {
+            path,
+            committed: false,
+        }
+    }
+
+    /// Marks the file as "committed," preventing its deletion on drop.
+    /// This should be called only after the file has been successfully and
+    /// atomically moved to its final destination.
+    fn commit(mut self) {
+        self.committed = true;
+    }
+}
+
+impl<'a> Drop for TempFileGuard<'a> {
+    fn drop(&mut self) {
+        if !self.committed {
+            // If the file was not committed, it's a temporary partial file
+            // that should be cleaned up. We ignore a potential error here,
+            // as we can't do anything about it during a drop.
+            let _ = fs::remove_file(self.path);
+        }
+    }
+}
 
 /// Handles the download and caching of a remote model from a URL.
 ///
@@ -42,28 +77,24 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
     }
 
     let temp_path = cached_path.with_extension("onnx.part");
-    let result = (|| {
-        let mut response = reqwest::blocking::get(url)
-            .map_err(|e| InferaError::HttpRequestError(e.to_string()))?
-            .error_for_status()
-            .map_err(|e| InferaError::HttpRequestError(e.to_string()))?;
+    // The guard ensures that the temp file is cleaned up if a panic occurs.
+    let guard = TempFileGuard::new(&temp_path);
 
-        let mut temp_file =
-            File::create(&temp_path).map_err(|e| InferaError::IoError(e.to_string()))?;
-        io::copy(&mut response, &mut temp_file).map_err(|e| InferaError::IoError(e.to_string()))?;
+    let mut response = reqwest::blocking::get(url)
+        .map_err(|e| InferaError::HttpRequestError(e.to_string()))?
+        .error_for_status()
+        .map_err(|e| InferaError::HttpRequestError(e.to_string()))?;
 
-        fs::rename(&temp_path, &cached_path).map_err(|e| InferaError::IoError(e.to_string()))?;
-        Ok(cached_path.clone())
-    })();
+    let mut temp_file =
+        File::create(&temp_path).map_err(|e| InferaError::IoError(e.to_string()))?;
+    io::copy(&mut response, &mut temp_file).map_err(|e| InferaError::IoError(e.to_string()))?;
 
-    if result.is_err() {
-        if temp_path.exists() {
-            // Attempt to clean up the partial file, but don't worry if it fails.
-            let _ = fs::remove_file(&temp_path);
-        }
-    }
+    fs::rename(&temp_path, &cached_path).map_err(|e| InferaError::IoError(e.to_string()))?;
 
-    result
+    // The file has been successfully renamed, so we can disarm the guard.
+    guard.commit();
+
+    Ok(cached_path)
 }
 
 #[cfg(test)]
@@ -137,5 +168,39 @@ mod tests {
 
         assert!(!cached_path.exists(), "Final cache file should not exist");
         assert!(!temp_path.exists(), "Partial file should be cleaned up");
+    }
+
+    #[test]
+    fn test_handle_remote_model_cleanup_on_panic() {
+        let mut server = Server::new();
+        // This mock setup causes a panic in a background thread of the HTTP client,
+        // which surfaces as a reqwest::Error on the calling thread.
+        let _m = server
+            .mock("GET", "/panic_model.onnx")
+            .with_header("content-length", "100")
+            .with_body("this body is shorter than the content-length")
+            .create();
+
+        let url = server.url();
+        let model_url = format!("{}/panic_model.onnx", url);
+
+        // The download should fail because of the malformed response.
+        let result = handle_remote_model(&model_url);
+        assert!(result.is_err(), "The download should have failed");
+
+        // After the failure, the temporary file should be cleaned up by the TempFileGuard.
+        let cache_dir = env::temp_dir().join("infera_cache");
+        let mut hasher = Sha256::new();
+        hasher.update(model_url.as_bytes());
+        let hash_hex = hex::encode(hasher.finalize());
+        let cached_path = cache_dir.join(format!("{}.onnx", hash_hex));
+        let temp_path = cached_path.with_extension("onnx.part");
+
+        assert!(!cached_path.exists(), "Final cache file should not exist");
+        // This assertion is expected to fail before the fix.
+        assert!(
+            !temp_path.exists(),
+            "Partial file should be cleaned up after a panic"
+        );
     }
 }
