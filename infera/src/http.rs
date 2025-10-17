@@ -27,7 +27,7 @@ impl<'a> TempFileGuard<'a> {
     /// Marks the file as "committed," preventing its deletion on drop.
     /// This should be called only after the file has been successfully and
     /// atomically moved to its final destination.
-    fn commit(mut self) {
+    fn commit(&mut self) {
         self.committed = true;
     }
 }
@@ -78,7 +78,7 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
 
     let temp_path = cached_path.with_extension("onnx.part");
     // The guard ensures that the temp file is cleaned up if a panic occurs.
-    let guard = TempFileGuard::new(&temp_path);
+    let mut guard = TempFileGuard::new(&temp_path);
 
     let mut response = reqwest::blocking::get(url)
         .map_err(|e| InferaError::HttpRequestError(e.to_string()))?
@@ -212,5 +212,30 @@ mod tests {
         );
 
         server_handle.join().unwrap();
+    }
+
+    #[test]
+    fn test_handle_remote_model_success_and_cache() {
+        // Serve a small body with an accurate Content-Length
+        let mut server = Server::new();
+        let body = b"onnxdata".to_vec();
+        let _m = server
+            .mock("GET", "/ok_model.onnx")
+            .with_status(200)
+            .with_header("Content-Length", &body.len().to_string())
+            .with_body(body.clone())
+            .create();
+        let url = format!("{}/ok_model.onnx", server.url());
+
+        let path1 = handle_remote_model(&url).expect("download should succeed");
+        assert!(path1.exists(), "cached file must exist");
+        let content1 = fs::read(&path1).expect("read cached file");
+        assert_eq!(content1, body);
+
+        // Second call should hit cache and return same path without network
+        let path2 = handle_remote_model(&url).expect("cache should hit");
+        assert_eq!(path1, path2);
+        let temp_path = path1.with_extension("onnx.part");
+        assert!(!temp_path.exists(), "no partial file should remain");
     }
 }

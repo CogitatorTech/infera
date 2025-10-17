@@ -267,10 +267,11 @@ pub extern "C" fn infera_get_loaded_models() -> *mut c_char {
 #[no_mangle]
 pub extern "C" fn infera_get_version() -> *mut c_char {
     let cache_dir = env::temp_dir().join("infera_cache");
+    let cache_dir_str = cache_dir.to_string_lossy().to_string();
     let info = json!({
         "version": env!("CARGO_PKG_VERSION"),
         "onnx_backend": if cfg!(feature = "tract") { "tract" } else { "disabled" },
-        "model_cache_dir": cache_dir.to_str(),
+        "model_cache_dir": cache_dir_str,
     });
     let json_str = serde_json::to_string(&info).unwrap_or_default();
     CString::new(json_str).unwrap_or_default().into_raw()
@@ -505,6 +506,35 @@ mod tests {
             .to_str()
             .unwrap()
             .contains("Invalid BLOB size: length must be a multiple of 4"));
+
+        unsafe {
+            infera_unload_model(model_name.as_ptr());
+        }
+    }
+
+    #[test]
+    fn test_infera_predict_invalid_shape() {
+        // Load a simple model that expects input shape [1,3]
+        let model_name = CString::new("shape_check").unwrap();
+        let model_path = CString::new("../test/models/linear.onnx").unwrap();
+        unsafe {
+            assert_eq!(
+                infera_load_model(model_name.as_ptr(), model_path.as_ptr()),
+                0
+            );
+        }
+
+        // Provide rows=1, cols=2 while model expects 3 features -> should error
+        let data: [f32; 2] = [0.0, 0.0];
+        let res = unsafe { infera_predict(model_name.as_ptr(), data.as_ptr(), 1, 2) };
+        assert_eq!(res.status, -1);
+        let err = unsafe { CStr::from_ptr(infera_last_error()) };
+        let msg = err.to_str().unwrap();
+        assert!(
+            msg.contains("Invalid input shape"),
+            "unexpected error: {}",
+            msg
+        );
 
         unsafe {
             infera_unload_model(model_name.as_ptr());
