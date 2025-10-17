@@ -486,4 +486,28 @@ mod tests {
             infera_free(result_ptr);
         }
     }
+
+    #[test]
+    fn test_infera_predict_from_blob_invalid_size() {
+        let model_name = CString::new("test_model").unwrap();
+        let model_path = CString::new("../test/models/linear.onnx").unwrap();
+        unsafe {
+            infera_load_model(model_name.as_ptr(), model_path.as_ptr());
+        }
+
+        // Blob size is 5, which is not a multiple of 4 (size of f32)
+        let blob: [u8; 5] = [0; 5];
+        let result = unsafe { infera_predict_from_blob(model_name.as_ptr(), blob.as_ptr(), 5) };
+        assert_eq!(result.status, -1);
+
+        let error = unsafe { CStr::from_ptr(infera_last_error()) };
+        assert!(error
+            .to_str()
+            .unwrap()
+            .contains("Invalid BLOB size: length must be a multiple of 4"));
+
+        unsafe {
+            infera_unload_model(model_name.as_ptr());
+        }
+    }
 }
