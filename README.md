@@ -61,6 +61,7 @@ See the [ROADMAP.md](ROADMAP.md) for the list of implemented and planned feature
 git clone --recursive https://github.com/CogitatorTech/infera.git
 cd infera
 
+# This might take a while to run
 make release
 ```
 

@@ -41,6 +41,8 @@ include = [
     "infera_predict_from_blob",
     "infera_get_model_info",
     "infera_get_loaded_models",
+    "infera_clear_cache",
+    "infera_get_cache_info",
     "infera_last_error",
     "infera_free",
     "infera_free_result",

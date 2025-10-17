@@ -1,0 +1,42 @@
+# name: test/sql/test_predict_multi_list.test
+# group: [infera]
+
+# Validate infera_predict_multi_list returns LIST[FLOAT] with correct length and values
+
+statement ok
+pragma enable_verification
+
+statement ok
+load 'build/release/extension/infera/infera.duckdb_extension'
+
+# Load models
+statement ok
+select infera_load_model('multi_output', 'test/models/multi_output.onnx')
+
+statement ok
+select infera_load_model('linear', 'test/models/linear.onnx')
+
+# multi_output model produces 4 outputs -> should equal [1,2,3,4]
+query I
+select infera_predict_multi_list('multi_output', 1.0, 2.0, 3.0, 4.0) = [1.0, 2.0, 3.0, 4.0]
+----
+true
+
+# single-output model -> should equal [1.75]
+query I
+select infera_predict_multi_list('linear', 1.0, 2.0, 3.0) = [1.75]
+----
+true
+
+# optional sanity: the JSON version contains 1.75 for linear
+query I
+select instr(infera_predict_multi('linear', 1.0, 2.0, 3.0), '1.75') > 0
+----
+true
+
+# cleanup
+statement ok
+select infera_unload_model('multi_output')
+
+statement ok
+select infera_unload_model('linear')

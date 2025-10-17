@@ -11,6 +11,24 @@ use std::mem;
 #[cfg(feature = "tract")]
 use tract_onnx::prelude::*;
 
+/// Compute (rows, cols) from a tensor shape by flattening all dimensions after the first into cols.
+///
+/// Rules:
+/// - Scalar (shape = []): (1, 1)
+/// - 1D (shape = [n]): (n, 1)
+/// - N-D (shape = [d0, d1, d2, ...]): (d0, product(d1..))
+pub(crate) fn shape_rows_cols(shape: &[usize]) -> (usize, usize) {
+    match shape.len() {
+        0 => (1, 1),
+        1 => (shape[0], 1),
+        _ => {
+            let rows = shape[0];
+            let cols = shape[1..].iter().copied().product::<usize>().max(1);
+            (rows, cols)
+        }
+    }
+}
+
 /// Loads, compiles, and stores an ONNX model.
 ///
 /// This function reads an ONNX model from the given path, uses the Tract library
@@ -102,6 +120,23 @@ pub(crate) fn run_inference_impl(
     let model = models
         .get(model_name)
         .ok_or_else(|| InferaError::ModelNotFound(model_name.to_string()))?;
+
+    // If model inner dimensions (after the first/batch dim) are all known (>0),
+    // validate that the provided `cols` matches their product. This yields clearer errors
+    // than deferring to the backend.
+    if !model.input_shape.is_empty() {
+        let inner_dims = &model.input_shape[1..];
+        if inner_dims.iter().all(|&d| d > 0) {
+            let expected_inner: usize = inner_dims.iter().map(|&d| d as usize).product();
+            if cols != expected_inner {
+                return Err(InferaError::InvalidInputShape {
+                    expected: format!("batch x {:?}", inner_dims),
+                    actual: format!("{} x {}", rows, cols),
+                });
+            }
+        }
+    }
+
     let input_data = unsafe { std::slice::from_raw_parts(data, rows * cols) };
     let input_tensor = Tensor::from_shape(&[rows, cols], input_data)
         .map_err(|e| InferaError::OnnxError(e.to_string()))?;
@@ -116,13 +151,7 @@ pub(crate) fn run_inference_impl(
     let output_array = output_tensor
         .to_array_view::<f32>()
         .map_err(|e| InferaError::OnnxError(e.to_string()))?;
-    let output_shape = output_array.shape();
-    let output_rows = output_shape[0];
-    let output_cols = if output_shape.len() > 1 {
-        output_shape[1]
-    } else {
-        1
-    };
+    let (output_rows, output_cols) = shape_rows_cols(output_array.shape());
     let output_data: Vec<f32> = output_array.iter().cloned().collect();
     let output_len = output_data.len();
     let output_ptr = Box::into_raw(output_data.into_boxed_slice()) as *mut f32;
@@ -217,13 +246,7 @@ pub(crate) fn run_inference_blob_impl(
     let output_array = output_tensor
         .to_array_view::<f32>()
         .map_err(|e| InferaError::OnnxError(e.to_string()))?;
-    let output_shape = output_array.shape();
-    let output_rows = output_shape[0];
-    let output_cols = if output_shape.len() > 1 {
-        output_shape[1]
-    } else {
-        1
-    };
+    let (output_rows, output_cols) = shape_rows_cols(output_array.shape());
     let output_data: Vec<f32> = output_array.iter().cloned().collect();
     let output_len = output_data.len();
     let output_ptr = Box::into_raw(output_data.into_boxed_slice()) as *mut f32;
@@ -286,4 +309,18 @@ pub(crate) fn get_model_metadata_impl(_model_name: &str) -> Result<String, Infer
     Err(InferaError::FeatureNotEnabled(
         "ONNX inference requires 'tract' feature to be enabled".to_string(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_shape_rows_cols() {
+        assert_eq!(shape_rows_cols(&[]), (1, 1));
+        assert_eq!(shape_rows_cols(&[5]), (5, 1));
+        assert_eq!(shape_rows_cols(&[2, 3]), (2, 3));
+        assert_eq!(shape_rows_cols(&[2, 3, 4]), (2, 12));
+        assert_eq!(shape_rows_cols(&[1, 1, 1, 1]), (1, 1));
+    }
 }

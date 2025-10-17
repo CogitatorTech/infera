@@ -11,13 +11,13 @@ It outlines features to be implemented and their current status.
 * **Input Data Types**
     * [x] `FLOAT` features from table columns.
     * [x] Type casting from `INTEGER`, `BIGINT`, and `DOUBLE` columns.
+    * [x] Type casting from `DECIMAL` columns.
     * [x] `BLOB` input for tensor data.
     * [ ] `STRUCT` or `MAP` input for named features.
 * **Output Data Types**
     * [x] Single `FLOAT` scalar output.
     * [x] Multiple `FLOAT` outputs as a `VARCHAR` containing JSON.
     * [x] Multiple `FLOAT` outputs as a `LIST[FLOAT]`.
-    * [ ] Return multiple outputs as a `STRUCT`.
 * **Batch Processing**
     * [x] Inference on batches for models with dynamic dimensions.
     * [ ] Automatic batch splitting for models with a fixed batch size.
@@ -32,7 +32,8 @@ It outlines features to be implemented and their current status.
     * [x] Unload models from memory.
     * [x] List loaded models.
     * [x] Get model metadata as a JSON object.
-    * [ ] Cache eviction policies for remote models.
+    * [x] Check if a model is currently loaded.
+    * [x] Cache eviction policies for remote models.
 
 ### 3. Performance and Concurrency
 

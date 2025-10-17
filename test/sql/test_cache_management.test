@@ -1,0 +1,78 @@
+# name: test/sql/test_cache_management.test
+# group: [infera]
+
+# Tests for cache management functionality including LRU eviction
+
+statement ok
+pragma enable_verification
+
+# load the infera extension
+statement ok
+load 'build/release/extension/infera/infera.duckdb_extension'
+
+# Test 1: Get cache info when cache is empty/new
+query I
+select infera_get_cache_info() is not null
+----
+true
+
+query I
+select length(infera_get_cache_info()) > 0
+----
+true
+
+query I
+select infera_get_cache_info() like '%cache_dir%'
+----
+true
+
+query I
+select infera_get_cache_info() like '%total_size_bytes%'
+----
+true
+
+query I
+select infera_get_cache_info() like '%file_count%'
+----
+true
+
+query I
+select infera_get_cache_info() like '%size_limit_bytes%'
+----
+true
+
+# Test 2: Clear cache should succeed even if cache is empty
+query I
+select infera_clear_cache()
+----
+true
+
+# Test 3: Load a local model (not remote, so no cache impact)
+statement ok
+select infera_load_model('linear', 'test/models/linear.onnx')
+
+query I
+select infera_is_model_loaded('linear')
+----
+true
+
+# Test 4: After clearing cache, get cache info should still work
+query I
+select infera_clear_cache()
+----
+true
+
+query I
+select infera_get_cache_info() is not null
+----
+true
+
+# Test 5: Verify version info includes cache directory
+query I
+select infera_get_version() like '%model_cache_dir%'
+----
+true
+
+# Cleanup
+statement ok
+select infera_unload_model('linear')

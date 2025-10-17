@@ -2,11 +2,11 @@
 // The public C API layer and module declarations.
 
 use serde_json::json;
-use std::env;
 use std::ffi::{c_char, CStr, CString};
 use std::fs;
 
 // Declare the internal modules
+mod config;
 mod engine;
 mod error;
 mod ffi_utils;
@@ -266,13 +266,94 @@ pub extern "C" fn infera_get_loaded_models() -> *mut c_char {
 /// The returned pointer must be freed with `infera_free` to avoid memory leaks.
 #[no_mangle]
 pub extern "C" fn infera_get_version() -> *mut c_char {
-    let cache_dir = env::temp_dir().join("infera_cache");
+    let cache_dir_str = config::CONFIG.cache_dir.to_string_lossy().to_string();
     let info = json!({
         "version": env!("CARGO_PKG_VERSION"),
         "onnx_backend": if cfg!(feature = "tract") { "tract" } else { "disabled" },
-        "model_cache_dir": cache_dir.to_str(),
+        "model_cache_dir": cache_dir_str,
     });
     let json_str = serde_json::to_string(&info).unwrap_or_default();
+    CString::new(json_str).unwrap_or_default().into_raw()
+}
+
+/// Clears the entire model cache directory.
+///
+/// This removes all cached remote models, freeing up disk space.
+///
+/// # Returns
+///
+/// * `0` on success.
+/// * `-1` on failure. Call `infera_last_error()` to get a descriptive error message.
+///
+/// # Safety
+///
+/// This function is safe to call at any time.
+#[no_mangle]
+pub extern "C" fn infera_clear_cache() -> i32 {
+    match http::clear_cache() {
+        Ok(()) => 0,
+        Err(e) => {
+            error::set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Returns cache statistics as a JSON string.
+///
+/// The JSON object includes:
+/// * `"cache_dir"`: The path to the cache directory.
+/// * `"total_size_bytes"`: Total size of cached models in bytes.
+/// * `"file_count"`: Number of cached model files.
+/// * `"size_limit_bytes"`: The configured cache size limit.
+///
+/// # Returns
+///
+/// A pointer to a heap-allocated, null-terminated C string containing the cache info.
+/// The caller is responsible for freeing this string using `infera_free`.
+///
+/// # Safety
+///
+/// The returned pointer must be freed with `infera_free` to avoid memory leaks.
+#[no_mangle]
+pub extern "C" fn infera_get_cache_info() -> *mut c_char {
+    let result = (|| -> Result<serde_json::Value, error::InferaError> {
+        let cache_dir = http::cache_dir();
+        let cache_dir_str = cache_dir.to_string_lossy().to_string();
+
+        let mut total_size = 0u64;
+        let mut file_count = 0usize;
+
+        if cache_dir.exists() {
+            for entry in fs::read_dir(&cache_dir)
+                .map_err(|e| error::InferaError::IoError(e.to_string()))?
+                .flatten()
+            {
+                let path = entry.path();
+                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("onnx") {
+                    if let Ok(metadata) = fs::metadata(&path) {
+                        total_size += metadata.len();
+                        file_count += 1;
+                    }
+                }
+            }
+        }
+
+        let size_limit = config::CONFIG.cache_size_limit;
+
+        Ok(json!({
+            "cache_dir": cache_dir_str,
+            "total_size_bytes": total_size,
+            "file_count": file_count,
+            "size_limit_bytes": size_limit,
+        }))
+    })();
+
+    let final_json = result.unwrap_or_else(|e| {
+        error::set_last_error(&e);
+        json!({"error": e.to_string()})
+    });
+    let json_str = serde_json::to_string(&final_json).unwrap_or_default();
     CString::new(json_str).unwrap_or_default().into_raw()
 }
 
@@ -485,5 +566,84 @@ mod tests {
                 .contains("Null pointer passed"));
             infera_free(result_ptr);
         }
+    }
+
+    #[test]
+    fn test_infera_predict_from_blob_invalid_size() {
+        let model_name = CString::new("test_model").unwrap();
+        let model_path = CString::new("../test/models/linear.onnx").unwrap();
+        unsafe {
+            infera_load_model(model_name.as_ptr(), model_path.as_ptr());
+        }
+
+        // Blob size is 5, which is not a multiple of 4 (size of f32)
+        let blob: [u8; 5] = [0; 5];
+        let result = unsafe { infera_predict_from_blob(model_name.as_ptr(), blob.as_ptr(), 5) };
+        assert_eq!(result.status, -1);
+
+        let error = unsafe { CStr::from_ptr(infera_last_error()) };
+        assert!(error
+            .to_str()
+            .unwrap()
+            .contains("Invalid BLOB size: length must be a multiple of 4"));
+
+        unsafe {
+            infera_unload_model(model_name.as_ptr());
+        }
+    }
+
+    #[test]
+    fn test_infera_predict_invalid_shape() {
+        // Load a simple model that expects input shape [1,3]
+        let model_name = CString::new("shape_check").unwrap();
+        let model_path = CString::new("../test/models/linear.onnx").unwrap();
+        unsafe {
+            assert_eq!(
+                infera_load_model(model_name.as_ptr(), model_path.as_ptr()),
+                0
+            );
+        }
+
+        // Provide rows=1, cols=2 while model expects 3 features -> should error
+        let data: [f32; 2] = [0.0, 0.0];
+        let res = unsafe { infera_predict(model_name.as_ptr(), data.as_ptr(), 1, 2) };
+        assert_eq!(res.status, -1);
+        let err = unsafe { CStr::from_ptr(infera_last_error()) };
+        let msg = err.to_str().unwrap();
+        assert!(
+            msg.contains("Invalid input shape"),
+            "unexpected error: {}",
+            msg
+        );
+
+        unsafe {
+            infera_unload_model(model_name.as_ptr());
+        }
+    }
+
+    #[test]
+    fn test_infera_get_model_info_nonexistent_returns_error_json() {
+        let name = CString::new("__missing_model__").unwrap();
+        let info_ptr = unsafe { infera_get_model_info(name.as_ptr()) };
+        let info_json = unsafe { CStr::from_ptr(info_ptr).to_str().unwrap() };
+        let value: serde_json::Value = serde_json::from_str(info_json).unwrap();
+        assert!(
+            value.get("error").is_some(),
+            "expected error field in JSON: {}",
+            info_json
+        );
+        unsafe { infera_free(info_ptr) };
+    }
+
+    #[test]
+    fn test_infera_get_cache_info_includes_configured_limit() {
+        let cache_info_ptr = infera_get_cache_info();
+        let cache_info_json = unsafe { CStr::from_ptr(cache_info_ptr).to_str().unwrap() };
+        let value: serde_json::Value = serde_json::from_str(cache_info_json).unwrap();
+        let size_limit = value["size_limit_bytes"]
+            .as_u64()
+            .expect("size_limit_bytes should be u64");
+        assert_eq!(size_limit, crate::config::CONFIG.cache_size_limit);
+        unsafe { infera_free(cache_info_ptr) };
     }
 }
