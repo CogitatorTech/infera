@@ -171,24 +171,33 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_remote_model_cleanup_on_panic() {
-        let mut server = Server::new();
-        // This mock setup causes a panic in a background thread of the HTTP client,
-        // which surfaces as a reqwest::Error on the calling thread.
-        let _m = server
-            .mock("GET", "/panic_model.onnx")
-            .with_header("content-length", "100")
-            .with_body("this body is shorter than the content-length")
-            .create();
+    fn test_handle_remote_model_cleanup_on_connection_drop() {
+        let server = TinyServer::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let model_url = format!("http://127.0.0.1:{}/dropped_connection.onnx", port);
 
-        let url = server.url();
-        let model_url = format!("{}/panic_model.onnx", url);
+        let server_handle = thread::spawn(move || {
+            if let Ok(request) = server.recv() {
+                // By responding with a Content-Length header but then dropping the
+                // request without sending a body, we simulate a connection drop.
+                // reqwest will receive the headers and expect a body, but the
+                // connection will be closed prematurely, resulting in an I/O error.
+                let response = Response::empty(200)
+                    .with_header(Header::from_bytes(&b"Content-Length"[..], &b"1024"[..]).unwrap());
+                // The `respond` call sends the headers, but the `Request` object
+                // is dropped immediately after, closing the connection.
+                let _ = request.respond(response);
+            }
+        });
 
-        // The download should fail because of the malformed response.
+        // The download should fail because the server closes the connection prematurely.
         let result = handle_remote_model(&model_url);
-        assert!(result.is_err(), "The download should have failed");
+        assert!(
+            result.is_err(),
+            "The download should fail on a connection drop"
+        );
 
-        // After the failure, the temporary file should be cleaned up by the TempFileGuard.
+        // After the failure, the temporary file should be cleaned up.
         let cache_dir = env::temp_dir().join("infera_cache");
         let mut hasher = Sha256::new();
         hasher.update(model_url.as_bytes());
@@ -197,10 +206,11 @@ mod tests {
         let temp_path = cached_path.with_extension("onnx.part");
 
         assert!(!cached_path.exists(), "Final cache file should not exist");
-        // This assertion is expected to fail before the fix.
         assert!(
             !temp_path.exists(),
-            "Partial file should be cleaned up after a panic"
+            "Partial file should be cleaned up after a connection drop"
         );
+
+        server_handle.join().unwrap();
     }
 }

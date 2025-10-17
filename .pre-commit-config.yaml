@@ -1,5 +1,6 @@
 default_stages: [ pre-push ]
 fail_fast: false
+exclude: '(^external/)'
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks

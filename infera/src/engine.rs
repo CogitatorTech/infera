@@ -178,7 +178,7 @@ pub(crate) fn run_inference_blob_impl(
     let model = models
         .get(model_name)
         .ok_or_else(|| InferaError::ModelNotFound(model_name.to_string()))?;
-    if blob_len % mem::size_of::<f32>() != 0 {
+    if !blob_len.is_multiple_of(mem::size_of::<f32>()) {
         return Err(InferaError::InvalidBlobSize);
     }
     let blob_bytes = unsafe { std::slice::from_raw_parts(blob_data, blob_len) };
