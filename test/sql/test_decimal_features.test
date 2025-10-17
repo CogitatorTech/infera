@@ -1,0 +1,23 @@
+# name: test/sql/test_decimal_features.test
+# group: [infera]
+
+# Validate DECIMAL feature inputs work (via implicit cast) and return correct results
+
+statement ok
+pragma enable_verification
+
+statement ok
+load 'build/release/extension/infera/infera.duckdb_extension'
+
+statement ok
+select infera_load_model('linear_dec', 'test/models/linear.onnx')
+
+# Use DECIMAL features; expected y = 2*1 - 1*2 + 0.5*3 + 0.25 = 1.75
+query I
+select abs(infera_predict('linear_dec', DECIMAL '1.0', DECIMAL '2.0', DECIMAL '3.0') - 1.75) < 1e-5
+----
+true
+
+statement ok
+select infera_unload_model('linear_dec')
+

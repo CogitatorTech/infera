@@ -171,6 +171,12 @@ static void ExtractFeatures(DataChunk &args, std::vector<float> &features) {
       case LogicalTypeId::DOUBLE: feature_float = static_cast<float>(feature_val.GetValue<double>()); break;
       case LogicalTypeId::INTEGER: feature_float = static_cast<float>(feature_val.GetValue<int32_t>()); break;
       case LogicalTypeId::BIGINT: feature_float = static_cast<float>(feature_val.GetValue<int64_t>()); break;
+      case LogicalTypeId::DECIMAL: {
+        // Cast DECIMAL to DOUBLE then to float for inference
+        auto casted = feature_val.DefaultCastAs(LogicalType::DOUBLE);
+        feature_float = static_cast<float>(casted.GetValue<double>());
+        break;
+      }
       default: throw InvalidInputException("Unsupported feature type: " + feature_val.type().ToString());
       }
       features.push_back(feature_float);
@@ -295,6 +301,28 @@ static void GetLoadedModels(DataChunk &args, ExpressionState &state, Vector &res
   infera::infera_free(models_json);
 }
 
+static void IsModelLoaded(DataChunk &args, ExpressionState &state, Vector &result) {
+  if (args.ColumnCount() != 1) {
+    throw InvalidInputException("infera_is_model_loaded(model_name) expects exactly 1 argument");
+  }
+  if (args.size() == 0) { return; }
+  auto model_name_val = args.data[0].GetValue(0);
+  if (model_name_val.IsNull()) {
+    throw InvalidInputException("Model name cannot be NULL");
+  }
+  std::string model_name_str = model_name_val.ToString();
+  char *models_json_c = infera::infera_get_loaded_models();
+  std::string models_json = models_json_c ? std::string(models_json_c) : std::string();
+  infera::infera_free(models_json_c);
+
+  std::string needle = "\"" + model_name_str + "\""; // search for quoted name
+  bool found = models_json.find(needle) != std::string::npos;
+
+  result.SetVectorType(VectorType::CONSTANT_VECTOR);
+  ConstantVector::GetData<bool>(result)[0] = found;
+  ConstantVector::SetNull(result, false);
+}
+
 /**
  * @brief Implements the `infera_predict_multi(name, ...features)` SQL function.
  *
@@ -341,6 +369,50 @@ static void PredictMulti(DataChunk &args, ExpressionState &state, Vector &result
     result_data[row_idx] = StringVector::AddString(result, oss.str());
   }
   infera::infera_free_result(res);
+}
+
+/**
+ * @brief Implements the `infera_predict_multi_list(name, ...features)` SQL function.
+ *
+ * Similar to `PredictMulti`, but returns the model's output as a list of floats
+ * instead of a JSON-encoded string.
+ *
+ * @param args The input arguments from DuckDB.
+ * @param state The expression state.
+ * @param result The result vector to populate.
+ */
+static void PredictMultiList(DataChunk &args, ExpressionState &state, Vector &result) {
+  if (args.size() == 0) { return; }
+  std::string model_name_str = ValidateAndGetModelName(args, "infera_predict_multi_list");
+
+  const idx_t batch_size = args.size();
+  const idx_t feature_count = args.ColumnCount() - 1;
+
+  std::vector<float> features;
+  ExtractFeatures(args, features);
+
+  infera::InferaInferenceResult res = infera::infera_predict(model_name_str.c_str(), features.data(), batch_size, feature_count);
+  if (res.status != 0) {
+    infera::infera_free_result(res);
+    throw InvalidInputException("Inference failed for model '" + model_name_str + "': " + GetInferaError());
+  }
+  if (res.rows != batch_size) {
+    std::string err_msg = StringUtil::Format("Model output row count mismatch. Expected %d, but got %d.", batch_size, res.rows);
+    infera::infera_free_result(res);
+    throw InvalidInputException(err_msg);
+  }
+  result.SetVectorType(VectorType::FLAT_VECTOR);
+  for (idx_t row_idx = 0; row_idx < batch_size; row_idx++) {
+    std::vector<Value> elems;
+    elems.reserve(res.cols);
+    const size_t offset = static_cast<size_t>(row_idx) * res.cols;
+    for (size_t col_idx = 0; col_idx < res.cols; col_idx++) {
+      elems.emplace_back(Value::FLOAT(res.data[offset + col_idx]));
+    }
+    result.SetValue(row_idx, Value::LIST(std::move(elems)));
+  }
+  infera::infera_free_result(res);
+  result.Verify(args.size());
 }
 
 /**
@@ -396,6 +468,7 @@ static void LoadInternal(ExtensionLoader &loader) {
     }
     loader.RegisterFunction(ScalarFunction("infera_predict", arg_types, LogicalType::FLOAT, Predict));
     loader.RegisterFunction(ScalarFunction("infera_predict_multi", arg_types, LogicalType::VARCHAR, PredictMulti));
+    loader.RegisterFunction(ScalarFunction("infera_predict_multi_list", arg_types, LogicalType::LIST(LogicalType::FLOAT), PredictMultiList));
   }
 
   loader.RegisterFunction(ScalarFunction("infera_predict_from_blob", {LogicalType::VARCHAR, LogicalType::BLOB}, LogicalType::LIST(LogicalType::FLOAT), PredictFromBlob));
@@ -403,6 +476,7 @@ static void LoadInternal(ExtensionLoader &loader) {
   loader.RegisterFunction(ScalarFunction("infera_get_model_info", {LogicalType::VARCHAR}, LogicalType::VARCHAR, GetModelInfo));
   loader.RegisterFunction(ScalarFunction("infera_get_version", {}, LogicalType::VARCHAR, GetVersion));
   loader.RegisterFunction(ScalarFunction("infera_set_autoload_dir", {LogicalType::VARCHAR}, LogicalType::VARCHAR, SetAutoloadDir));
+  loader.RegisterFunction(ScalarFunction("infera_is_model_loaded", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, IsModelLoaded));
 }
 
 void InferaExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }

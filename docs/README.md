@@ -2,17 +2,23 @@
 
 The table below includes the information about all SQL functions exposed by Infera.
 
-| # | Function                                                | Return Type      | Description                                                                                                                                 |
-|---|:--------------------------------------------------------|:-----------------|:--------------------------------------------------------------------------------------------------------------------------------------------|
-| 1 | `infera_load_model(name VARCHAR, path_or_url VARCHAR)`  | `BOOLEAN`        | Loads an ONNX model from a local file path or a remote URL and assigns it a unique name. Returns `true` on success.                         |
-| 2 | `infera_unload_model(name VARCHAR)`                     | `BOOLEAN`        | Unloads a model, freeing its associated resources. Returns `true` on success.                                                               |
-| 3 | `infera_set_autoload_dir(path VARCHAR)`                 | `VARCHAR (JSON)` | Scans a directory for `.onnx` files, loads them automatically, and returns a JSON report of loaded models and any errors.                   |
-| 4 | `infera_get_loaded_models()`                            | `VARCHAR (JSON)` | Returns a JSON array containing the names of all currently loaded models.                                                                   |
-| 5 | `infera_get_model_info(name VARCHAR)`                   | `VARCHAR (JSON)` | Returns a JSON object with metadata about a specific loaded model, including its name, input/output shapes, and status.                     |
-| 6 | `infera_predict(name VARCHAR, features... FLOAT)`       | `FLOAT`          | Performs inference on a batch of data, returning a single float value for each input row.                                                   |
-| 7 | `infera_predict_multi(name VARCHAR, features... FLOAT)` | `VARCHAR (JSON)` | Performs inference and returns all outputs as a JSON-encoded array. This is useful for models that produce multiple predictions per sample. |
-| 8 | `infera_predict_from_blob(name VARCHAR, data BLOB)`     | `LIST[FLOAT]`    | Performs inference on raw `BLOB` data (for example, used for an image tensor), returning the result as a list of floats.                    |
-| 9 | `infera_get_version()`                                  | `VARCHAR (JSON)` | Returns a JSON object with version and build information for the Infera extension.                                                          |
+| #  | Function                                                     | Return Type      | Description                                                                                                                                 |
+|----|:-------------------------------------------------------------|:-----------------|:--------------------------------------------------------------------------------------------------------------------------------------------|
+| 1  | `infera_load_model(name VARCHAR, path_or_url VARCHAR)`       | `BOOLEAN`        | Loads an ONNX model from a local file path or a remote URL and assigns it a unique name. Returns `true` on success.                         |
+| 2  | `infera_unload_model(name VARCHAR)`                          | `BOOLEAN`        | Unloads a model, freeing its associated resources. Returns `true` on success.                                                               |
+| 3  | `infera_set_autoload_dir(path VARCHAR)`                      | `VARCHAR (JSON)` | Scans a directory for `.onnx` files, loads them automatically, and returns a JSON report of loaded models and any errors.                   |
+| 4  | `infera_get_loaded_models()`                                 | `VARCHAR (JSON)` | Returns a JSON array containing the names of all currently loaded models.                                                                   |
+| 5  | `infera_get_model_info(name VARCHAR)`                        | `VARCHAR (JSON)` | Returns a JSON object with metadata about a specific loaded model, including its name, input/output shapes, and status.                     |
+| 6  | `infera_predict(name VARCHAR, features... FLOAT)`            | `FLOAT`          | Performs inference on a batch of data, returning a single float value for each input row.                                                   |
+| 7  | `infera_predict_multi(name VARCHAR, features... FLOAT)`      | `VARCHAR (JSON)` | Performs inference and returns all outputs as a JSON-encoded array. This is useful for models that produce multiple predictions per sample. |
+| 8  | `infera_predict_multi_list(name VARCHAR, features... FLOAT)` | `LIST[FLOAT]`    | Performs inference and returns all outputs as a typed list of floats. Useful for multi-output models without JSON parsing.                  |
+| 9  | `infera_predict_from_blob(name VARCHAR, data BLOB)`          | `LIST[FLOAT]`    | Performs inference on raw `BLOB` data (for example, used for an image tensor), returning the result as a list of floats.                    |
+| 10 | `infera_is_model_loaded(name VARCHAR)`                       | `BOOLEAN`        | Returns `true` if the given model is currently loaded, otherwise `false`.                                                                   |
+| 11 | `infera_get_version()`                                       | `VARCHAR (JSON)` | Returns a JSON object with version and build information for the Infera extension.                                                          |
+
+> [!NOTE]
+> The `features...` arguments accept `FLOAT` as well as values from `DOUBLE`, `INTEGER`, `BIGINT`, and `DECIMAL`
+> columns (casted to floats under the hood).
 
 ---
 
@@ -28,6 +34,10 @@ select infera_load_model('local_model', '/path/to/model.onnx');
 
 -- Load a model from a remote URL
 select infera_load_model('remote_model', 'https://.../model.onnx');
+
+-- Check if a model is loaded
+select infera_is_model_loaded('local_model');
+-- Output: true or false
 
 -- List all loaded models
 select infera_get_loaded_models();
@@ -47,14 +57,21 @@ select infera_unload_model('remote_model');
 -- Predict using literal feature values
 select infera_predict('my_model', 1.0, 2.5, 3.0) as prediction;
 
+-- Predict using DECIMAL feature values (cast automatically)
+select infera_predict('my_model', DECIMAL '1.0', DECIMAL '2.0', DECIMAL '3.0') as prediction;
+
 -- Predict using columns from a table
 select id,
        infera_predict('my_model', feature1, feature2, feature3) as prediction
 from features_table;
 
 -- Get multiple outputs as a JSON array.
--- This is a useful models that return multiple outputs per prediction (like a non-binary classifier)
+-- This is useful for models that return multiple outputs per prediction.
 select infera_predict_multi('multi_output_model', 1.0, 2.0);
+-- Output: [0.85, 0.12, 0.03]
+
+-- Get multiple outputs as a typed list of floats (no JSON parsing)
+select infera_predict_multi_list('multi_output_model', 1.0, 2.0);
 -- Output: [0.85, 0.12, 0.03]
 
 -- Predict using raw BLOB data (like tensor data)
@@ -73,6 +90,10 @@ from my_table;
 -- Get a JSON list of all loaded models
 select infera_get_loaded_models();
 -- Output: ["linear_model", "squeezenet"]
+
+-- Check if a model is loaded
+select infera_is_model_loaded('squeezenet');
+-- Output: true or false
 
 -- Get detailed metadata for a specific model
 select infera_get_model_info('squeezenet');

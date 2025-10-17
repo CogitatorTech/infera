@@ -35,12 +35,34 @@ impl<'a> TempFileGuard<'a> {
 impl<'a> Drop for TempFileGuard<'a> {
     fn drop(&mut self) {
         if !self.committed {
-            // If the file was not committed, it's a temporary partial file
-            // that should be cleaned up. We ignore a potential error here,
-            // as we can't do anything about it during a drop.
             let _ = fs::remove_file(self.path);
         }
     }
+}
+
+/// Return the cache directory path used by Infera for remote models.
+pub(crate) fn cache_dir() -> PathBuf {
+    env::temp_dir().join("infera_cache")
+}
+
+/// Clears the entire cache directory by deleting its contents.
+/// If the directory does not exist, this is a no-op.
+pub(crate) fn clear_cache() -> Result<(), InferaError> {
+    let dir = cache_dir();
+    if !dir.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(&dir).map_err(|e| InferaError::IoError(e.to_string()))? {
+        if let Ok(entry) = entry {
+            let path = entry.path();
+            if path.is_file() {
+                fs::remove_file(&path).map_err(|e| InferaError::IoError(e.to_string()))?;
+            } else if path.is_dir() {
+                fs::remove_dir_all(&path).map_err(|e| InferaError::IoError(e.to_string()))?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Handles the download and caching of a remote model from a URL.
@@ -63,7 +85,7 @@ impl<'a> Drop for TempFileGuard<'a> {
 /// * `Err(InferaError)`: An error indicating failure in creating the cache directory,
 ///   making the HTTP request, or writing the file to disk.
 pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
-    let cache_dir = env::temp_dir().join("infera_cache");
+    let cache_dir = cache_dir();
     if !cache_dir.exists() {
         fs::create_dir_all(&cache_dir).map_err(|e| InferaError::CacheDirError(e.to_string()))?;
     }
@@ -77,7 +99,6 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
     }
 
     let temp_path = cached_path.with_extension("onnx.part");
-    // The guard ensures that the temp file is cleaned up if a panic occurs.
     let mut guard = TempFileGuard::new(&temp_path);
 
     let mut response = reqwest::blocking::get(url)
@@ -91,7 +112,6 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
 
     fs::rename(&temp_path, &cached_path).map_err(|e| InferaError::IoError(e.to_string()))?;
 
-    // The file has been successfully renamed, so we can disarm the guard.
     guard.commit();
 
     Ok(cached_path)
@@ -237,5 +257,16 @@ mod tests {
         assert_eq!(path1, path2);
         let temp_path = path1.with_extension("onnx.part");
         assert!(!temp_path.exists(), "no partial file should remain");
+    }
+
+    #[test]
+    fn test_clear_cache_removes_files() {
+        let dir = cache_dir();
+        let _ = fs::create_dir_all(&dir);
+        let dummy = dir.join("dummy.tmp");
+        fs::write(&dummy, b"x").unwrap();
+        assert!(dummy.exists());
+        clear_cache().unwrap();
+        assert!(!dummy.exists());
     }
 }
