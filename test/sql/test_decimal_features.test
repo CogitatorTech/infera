@@ -20,4 +20,3 @@ true
 
 statement ok
 select infera_unload_model('linear_dec')
-

@@ -124,7 +124,7 @@ pub(crate) fn run_inference_impl(
     // If model inner dimensions (after the first/batch dim) are all known (>0),
     // validate that the provided `cols` matches their product. This yields clearer errors
     // than deferring to the backend.
-    if model.input_shape.len() >= 1 {
+    if !model.input_shape.is_empty() {
         let inner_dims = &model.input_shape[1..];
         if inner_dims.iter().all(|&d| d > 0) {
             let expected_inner: usize = inner_dims.iter().map(|&d| d as usize).product();

@@ -5,7 +5,6 @@ use crate::config::{LogLevel, CONFIG};
 use crate::error::InferaError;
 use crate::log;
 use sha2::{Digest, Sha256};
-use std::env;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -71,15 +70,16 @@ fn get_cached_files_by_access_time() -> Result<Vec<(PathBuf, SystemTime, u64)>, 
     }
 
     let mut files = Vec::new();
-    for entry in fs::read_dir(&dir).map_err(|e| InferaError::IoError(e.to_string()))? {
-        if let Ok(entry) = entry {
-            let path = entry.path();
-            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("onnx") {
-                if let Ok(metadata) = fs::metadata(&path) {
-                    let accessed = metadata.accessed().unwrap_or_else(|_| SystemTime::now());
-                    let size = metadata.len();
-                    files.push((path, accessed, size));
-                }
+    for entry in fs::read_dir(&dir)
+        .map_err(|e| InferaError::IoError(e.to_string()))?
+        .flatten()
+    {
+        let path = entry.path();
+        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("onnx") {
+            if let Ok(metadata) = fs::metadata(&path) {
+                let accessed = metadata.accessed().unwrap_or_else(|_| SystemTime::now());
+                let size = metadata.len();
+                files.push((path, accessed, size));
             }
         }
     }
@@ -127,14 +127,15 @@ pub(crate) fn clear_cache() -> Result<(), InferaError> {
     if !dir.exists() {
         return Ok(());
     }
-    for entry in fs::read_dir(&dir).map_err(|e| InferaError::IoError(e.to_string()))? {
-        if let Ok(entry) = entry {
-            let path = entry.path();
-            if path.is_file() {
-                fs::remove_file(&path).map_err(|e| InferaError::IoError(e.to_string()))?;
-            } else if path.is_dir() {
-                fs::remove_dir_all(&path).map_err(|e| InferaError::IoError(e.to_string()))?;
-            }
+    for entry in fs::read_dir(&dir)
+        .map_err(|e| InferaError::IoError(e.to_string()))?
+        .flatten()
+    {
+        let path = entry.path();
+        if path.is_file() {
+            fs::remove_file(&path).map_err(|e| InferaError::IoError(e.to_string()))?;
+        } else if path.is_dir() {
+            fs::remove_dir_all(&path).map_err(|e| InferaError::IoError(e.to_string()))?;
         }
     }
     Ok(())
@@ -276,6 +277,7 @@ fn download_file(url: &str, dest: &Path, timeout_secs: u64) -> Result<(), Infera
 mod tests {
     use super::*;
     use mockito::Server;
+    use std::env; // moved here: used in tests only
     use std::thread;
     use tiny_http::{Header, Response, Server as TinyServer};
 

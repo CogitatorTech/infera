@@ -2,7 +2,6 @@
 // The public C API layer and module declarations.
 
 use serde_json::json;
-use std::env;
 use std::ffi::{c_char, CStr, CString};
 use std::fs;
 
@@ -326,16 +325,15 @@ pub extern "C" fn infera_get_cache_info() -> *mut c_char {
         let mut file_count = 0usize;
 
         if cache_dir.exists() {
-            for entry in
-                fs::read_dir(&cache_dir).map_err(|e| error::InferaError::IoError(e.to_string()))?
+            for entry in fs::read_dir(&cache_dir)
+                .map_err(|e| error::InferaError::IoError(e.to_string()))?
+                .flatten()
             {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("onnx") {
-                        if let Ok(metadata) = fs::metadata(&path) {
-                            total_size += metadata.len();
-                            file_count += 1;
-                        }
+                let path = entry.path();
+                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("onnx") {
+                    if let Ok(metadata) = fs::metadata(&path) {
+                        total_size += metadata.len();
+                        file_count += 1;
                     }
                 }
             }

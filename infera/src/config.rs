@@ -46,6 +46,7 @@ impl LogLevel {
 
 /// Cache eviction strategy
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum CacheEvictionStrategy {
     /// Least Recently Used - evict oldest accessed files first
     LRU,
@@ -76,6 +77,7 @@ pub struct InferaConfig {
     pub cache_size_limit: u64,
 
     /// Whether to enable verbose logging
+    #[allow(dead_code)]
     pub verbose_logging: bool,
 
     /// HTTP request timeout in seconds
@@ -88,6 +90,7 @@ pub struct InferaConfig {
     pub http_retry_delay_ms: u64,
 
     /// Cache eviction strategy
+    #[allow(dead_code)]
     pub cache_eviction_strategy: CacheEvictionStrategy,
 
     /// Logging level

@@ -25,7 +25,7 @@ Infera supports configuration via environment variables to customize its behavio
   ```bash
   ## Set to 5GB
   export INFERA_CACHE_SIZE_LIMIT=5368709120
-  
+
   ## Set to 500MB
   export INFERA_CACHE_SIZE_LIMIT=524288000
   ```
@@ -96,10 +96,10 @@ Infera supports configuration via environment variables to customize its behavio
   ```bash
   ## Show all messages including debug
   export INFERA_LOG_LEVEL=DEBUG
-  
+
   ## Show only errors
   export INFERA_LOG_LEVEL=ERROR
-  
+
   ## Show informational messages and above
   export INFERA_LOG_LEVEL=INFO
   ```

@@ -33,4 +33,3 @@ query I
 select infera_is_model_loaded('linear')
 ----
 false
-
