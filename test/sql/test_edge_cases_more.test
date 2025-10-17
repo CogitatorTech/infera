@@ -31,8 +31,8 @@ select infera_unload_model('linear')
 ----
 true
 
-# model info after unload should contain model not found message
-query I
-select position('Model not found' in infera_get_model_info('linear')) > 0
+# model info after unload should error
+statement error
+select infera_get_model_info('linear')
 ----
-true
+Failed to get info for model 'linear'

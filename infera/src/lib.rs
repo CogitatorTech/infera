@@ -341,10 +341,7 @@ pub extern "C" fn infera_get_cache_info() -> *mut c_char {
             }
         }
 
-        let size_limit = env::var("INFERA_CACHE_SIZE_LIMIT")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(1024 * 1024 * 1024);
+        let size_limit = config::CONFIG.cache_size_limit;
 
         Ok(json!({
             "cache_dir": cache_dir_str,
@@ -624,5 +621,31 @@ mod tests {
         unsafe {
             infera_unload_model(model_name.as_ptr());
         }
+    }
+
+    #[test]
+    fn test_infera_get_model_info_nonexistent_returns_error_json() {
+        let name = CString::new("__missing_model__").unwrap();
+        let info_ptr = unsafe { infera_get_model_info(name.as_ptr()) };
+        let info_json = unsafe { CStr::from_ptr(info_ptr).to_str().unwrap() };
+        let value: serde_json::Value = serde_json::from_str(info_json).unwrap();
+        assert!(
+            value.get("error").is_some(),
+            "expected error field in JSON: {}",
+            info_json
+        );
+        unsafe { infera_free(info_ptr) };
+    }
+
+    #[test]
+    fn test_infera_get_cache_info_includes_configured_limit() {
+        let cache_info_ptr = infera_get_cache_info();
+        let cache_info_json = unsafe { CStr::from_ptr(cache_info_ptr).to_str().unwrap() };
+        let value: serde_json::Value = serde_json::from_str(cache_info_json).unwrap();
+        let size_limit = value["size_limit_bytes"]
+            .as_u64()
+            .expect("size_limit_bytes should be u64");
+        assert_eq!(size_limit, crate::config::CONFIG.cache_size_limit);
+        unsafe { infera_free(cache_info_ptr) };
     }
 }

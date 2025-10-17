@@ -12,11 +12,11 @@ load 'build/release/extension/infera/infera.duckdb_extension'
 
 # test 1: error handling for non-existent models
 
-# infera_get_model_info for a missing model returns a non-null json containing an error field
-query I
-select infera_get_model_info('nonexistent_model') is null
+# infera_get_model_info for a missing model should error
+statement error
+select infera_get_model_info('nonexistent_model')
 ----
-0
+Failed to get info for model 'nonexistent_model'
 
 # unloading a non-existent model is benign (idempotent) and returns false
 statement ok

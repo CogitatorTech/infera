@@ -227,6 +227,7 @@ static void Predict(DataChunk &args, ExpressionState &state, Vector &result) {
 
   infera::InferaInferenceResult res = infera::infera_predict(model_name_str.c_str(), features.data(), batch_size, feature_count);
   if (res.status != 0) {
+    infera::infera_free_result(res);
     throw InvalidInputException("Inference failed for model '" + model_name_str + "': " + GetInferaError());
   }
   if (res.rows != batch_size || res.cols != 1) {
@@ -434,16 +435,22 @@ static void GetModelInfo(DataChunk &args, ExpressionState &state, Vector &result
     throw InvalidInputException("Model name cannot be NULL");
   }
   std::string model_name_str = model_name.ToString();
-  char *json_meta = infera::infera_get_model_info(model_name_str.c_str());
+  char *json_meta_c = infera::infera_get_model_info(model_name_str.c_str());
 
-  if (json_meta == nullptr) {
-    throw InvalidInputException("Failed to get info for model '" + model_name_str + "': " + GetInferaError());
+  // Convert to std::string and free the C string immediately to avoid leaks
+  std::string json_meta = json_meta_c ? std::string(json_meta_c) : std::string();
+  if (json_meta_c) {
+    infera::infera_free(json_meta_c);
+  }
+
+  // If Rust returned an error JSON, surface it as a DuckDB error per contract/tests
+  if (json_meta.empty() || json_meta.find("\"error\"") != std::string::npos) {
+    throw InvalidInputException("Failed to get info for model '" + model_name_str + "'");
   }
 
   result.SetVectorType(VectorType::CONSTANT_VECTOR);
   ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, json_meta);
   ConstantVector::SetNull(result, false);
-  infera::infera_free(json_meta);
 }
 
 /**

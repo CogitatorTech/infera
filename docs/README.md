@@ -8,7 +8,7 @@ The table below includes the information about all SQL functions exposed by Infe
 | 2  | `infera_unload_model(name VARCHAR)`                          | `BOOLEAN`        | Unloads a model, freeing its associated resources. Returns `true` on success.                                                               |
 | 3  | `infera_set_autoload_dir(path VARCHAR)`                      | `VARCHAR (JSON)` | Scans a directory for `.onnx` files, loads them automatically, and returns a JSON report of loaded models and any errors.                   |
 | 4  | `infera_get_loaded_models()`                                 | `VARCHAR (JSON)` | Returns a JSON array containing the names of all currently loaded models.                                                                   |
-| 5  | `infera_get_model_info(name VARCHAR)`                        | `VARCHAR (JSON)` | Returns a JSON object with metadata about a specific loaded model, including its name, input/output shapes, and status.                     |
+| 5  | `infera_get_model_info(name VARCHAR)`                        | `VARCHAR (JSON)` | Returns a JSON object with metadata about a specific loaded model (name, input/output shapes). If the model is not loaded, this function raises an error. |
 | 6  | `infera_predict(name VARCHAR, features... FLOAT)`            | `FLOAT`          | Performs inference on a batch of data, returning a single float value for each input row.                                                   |
 | 7  | `infera_predict_multi(name VARCHAR, features... FLOAT)`      | `VARCHAR (JSON)` | Performs inference and returns all outputs as a JSON-encoded array. This is useful for models that produce multiple predictions per sample. |
 | 8  | `infera_predict_multi_list(name VARCHAR, features... FLOAT)` | `LIST[FLOAT]`    | Performs inference and returns all outputs as a typed list of floats. Useful for multi-output models without JSON parsing.                  |
@@ -45,7 +45,7 @@ select infera_is_model_loaded('local_model');
 select infera_get_loaded_models();
 -- Output: ["local_model", "remote_model"]
 
--- Get information about a specific model
+-- Get information about a specific model (throws an error if the model is not loaded)
 select infera_get_model_info('local_model');
 -- Output: {"name":"local_model","input_shape":[-1,3],"output_shape":[-1,1],"loaded":true}
 
@@ -97,7 +97,7 @@ select infera_get_loaded_models();
 select infera_is_model_loaded('squeezenet');
 -- Output: true or false
 
--- Get detailed metadata for a specific model
+-- Get detailed metadata for a specific model (errors if the model is not loaded)
 select infera_get_model_info('squeezenet');
 /* Output:
 {
@@ -121,14 +121,14 @@ select infera_set_autoload_dir('path/to/your/models');
 select infera_clear_cache();
 -- Output: true
 
--- Get cache statistics
+-- Get cache statistics (field names as returned by the function)
 select infera_get_cache_info();
 /* Output:
 {
-  "path": "/path/to/cache",
-  "size_bytes": 204800,
+  "cache_dir": "/path/to/cache",
+  "total_size_bytes": 204800,
   "file_count": 10,
-  "size_limit": 10485760
+  "size_limit_bytes": 10485760
 }
 */
 ```

@@ -69,7 +69,45 @@ pub unsafe extern "C" fn infera_free(ptr: *mut c_char) {
 /// on the same result will lead to undefined behavior.
 #[no_mangle]
 pub unsafe extern "C" fn infera_free_result(res: InferaInferenceResult) {
-    if !res.data.is_null() && res.len > 0 {
-        let _ = Vec::from_raw_parts(res.data, res.len, res.len);
+    if !res.data.is_null() {
+        // SAFETY: `res.data` was allocated from a Box<[f32]> via `into_raw` with length `res.len`.
+        // Reconstruct the slice pointer and drop it to free the allocation correctly.
+        let slice_ptr: *mut [f32] = std::ptr::slice_from_raw_parts_mut(res.data, res.len);
+        let _ = Box::from_raw(slice_ptr);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_infera_free_result_zero_len_non_null() {
+        // Allocate an empty slice on heap and convert to raw
+        let empty: Box<[f32]> = Vec::<f32>::new().into_boxed_slice();
+        let ptr = Box::into_raw(empty) as *mut f32;
+        let res = InferaInferenceResult {
+            data: ptr,
+            len: 0,
+            rows: 0,
+            cols: 0,
+            status: 0,
+        };
+        unsafe { infera_free_result(res) }; // should not panic or leak
+    }
+
+    #[test]
+    fn test_infera_free_result_non_empty() {
+        let data: Vec<f32> = vec![1.0, 2.0, 3.0];
+        let len = data.len();
+        let ptr = Box::into_raw(data.into_boxed_slice()) as *mut f32;
+        let res = InferaInferenceResult {
+            data: ptr,
+            len,
+            rows: 1,
+            cols: len,
+            status: 0,
+        };
+        unsafe { infera_free_result(res) }; // should free without UB
     }
 }
