@@ -7,6 +7,10 @@ use std::env;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+
+// Default cache size limit: 1GB
+const DEFAULT_CACHE_SIZE_LIMIT_BYTES: u64 = 1024 * 1024 * 1024;
 
 /// A guard that guarantees a temporary file is deleted when it goes out of scope.
 /// This is used to implement a panic-safe cleanup of partial downloads.
@@ -45,6 +49,80 @@ pub(crate) fn cache_dir() -> PathBuf {
     env::temp_dir().join("infera_cache")
 }
 
+/// Gets the cache size limit in bytes from environment variable or default.
+fn get_cache_size_limit() -> u64 {
+    env::var("INFERA_CACHE_SIZE_LIMIT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_CACHE_SIZE_LIMIT_BYTES)
+}
+
+/// Updates the access time of a cached file by touching it.
+fn touch_cache_file(path: &Path) -> Result<(), InferaError> {
+    if path.exists() {
+        let now = filetime::FileTime::now();
+        filetime::set_file_atime(path, now).map_err(|e| InferaError::IoError(e.to_string()))?;
+    }
+    Ok(())
+}
+
+/// Gets metadata about cached files sorted by access time (oldest first).
+fn get_cached_files_by_access_time() -> Result<Vec<(PathBuf, SystemTime, u64)>, InferaError> {
+    let dir = cache_dir();
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut files = Vec::new();
+    for entry in fs::read_dir(&dir).map_err(|e| InferaError::IoError(e.to_string()))? {
+        if let Ok(entry) = entry {
+            let path = entry.path();
+            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("onnx") {
+                if let Ok(metadata) = fs::metadata(&path) {
+                    let accessed = metadata.accessed().unwrap_or_else(|_| SystemTime::now());
+                    let size = metadata.len();
+                    files.push((path, accessed, size));
+                }
+            }
+        }
+    }
+
+    // Sort by access time, oldest first
+    files.sort_by_key(|(_, time, _)| *time);
+    Ok(files)
+}
+
+/// Calculates total cache size in bytes.
+fn get_cache_size() -> Result<u64, InferaError> {
+    let files = get_cached_files_by_access_time()?;
+    Ok(files.iter().map(|(_, _, size)| size).sum())
+}
+
+/// Evicts least recently used cache files until cache size is below limit.
+fn evict_cache_if_needed(required_space: u64) -> Result<(), InferaError> {
+    let limit = get_cache_size_limit();
+    let current_size = get_cache_size()?;
+
+    if current_size + required_space <= limit {
+        return Ok(());
+    }
+
+    let target_size = limit.saturating_sub(required_space);
+    let mut freed_size = 0u64;
+    let files = get_cached_files_by_access_time()?;
+
+    for (path, _, size) in files {
+        if current_size - freed_size <= target_size {
+            break;
+        }
+
+        fs::remove_file(&path).map_err(|e| InferaError::IoError(e.to_string()))?;
+        freed_size += size;
+    }
+
+    Ok(())
+}
+
 /// Clears the entire cache directory by deleting its contents.
 /// If the directory does not exist, this is a no-op.
 pub(crate) fn clear_cache() -> Result<(), InferaError> {
@@ -68,11 +146,12 @@ pub(crate) fn clear_cache() -> Result<(), InferaError> {
 /// Handles the download and caching of a remote model from a URL.
 ///
 /// If the model for the given URL is already present in the local cache, this
-/// function returns the path to the cached file directly. Otherwise, it downloads
-/// the file, stores it in the cache directory, and then returns the path.
+/// function updates its access time and returns the path. Otherwise, it downloads
+/// the file, evicts old cache entries if needed, stores it in the cache directory,
+/// and then returns the path.
 ///
-/// The cache location is a subdirectory named `infera_cache` inside the system's
-/// temporary directory. The filename for the cached model is the SHA256 hash of its URL.
+/// The cache uses an LRU (Least Recently Used) eviction policy with a configurable
+/// size limit (default 1GB, configurable via INFERA_CACHE_SIZE_LIMIT env var).
 ///
 /// # Arguments
 ///
@@ -95,6 +174,8 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
     let cached_path = cache_dir.join(format!("{}.onnx", hash_hex));
 
     if cached_path.exists() {
+        // Update access time for LRU tracking
+        touch_cache_file(&cached_path)?;
         return Ok(cached_path);
     }
 
@@ -109,6 +190,12 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
     let mut temp_file =
         File::create(&temp_path).map_err(|e| InferaError::IoError(e.to_string()))?;
     io::copy(&mut response, &mut temp_file).map_err(|e| InferaError::IoError(e.to_string()))?;
+
+    // Check file size and evict cache if needed
+    let file_size = fs::metadata(&temp_path)
+        .map_err(|e| InferaError::IoError(e.to_string()))?
+        .len();
+    evict_cache_if_needed(file_size)?;
 
     fs::rename(&temp_path, &cached_path).map_err(|e| InferaError::IoError(e.to_string()))?;
 

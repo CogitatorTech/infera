@@ -15,6 +15,8 @@ The table below includes the information about all SQL functions exposed by Infe
 | 9  | `infera_predict_from_blob(name VARCHAR, data BLOB)`          | `LIST[FLOAT]`    | Performs inference on raw `BLOB` data (for example, used for an image tensor), returning the result as a list of floats.                    |
 | 10 | `infera_is_model_loaded(name VARCHAR)`                       | `BOOLEAN`        | Returns `true` if the given model is currently loaded, otherwise `false`.                                                                   |
 | 11 | `infera_get_version()`                                       | `VARCHAR (JSON)` | Returns a JSON object with version and build information for the Infera extension.                                                          |
+| 12 | `infera_clear_cache()`                                       | `BOOLEAN`        | Clears the entire model cache directory, freeing up disk space. Returns `true` on success.                                                  |
+| 13 | `infera_get_cache_info()`                                    | `VARCHAR (JSON)` | Returns cache statistics including directory path, total size in bytes, file count, and configured size limit.                              |
 
 > [!NOTE]
 > The `features...` arguments accept `FLOAT` as well as values from `DOUBLE`, `INTEGER`, `BIGINT`, and `DECIMAL`
@@ -112,6 +114,21 @@ select infera_set_autoload_dir('path/to/your/models');
 {
   "loaded": ["model1", "model2"],
   "errors": []
+}
+*/
+
+-- Clear the entire model cache
+select infera_clear_cache();
+-- Output: true
+
+-- Get cache statistics
+select infera_get_cache_info();
+/* Output:
+{
+  "path": "/path/to/cache",
+  "size_bytes": 204800,
+  "file_count": 10,
+  "size_limit": 10485760
 }
 */
 ```

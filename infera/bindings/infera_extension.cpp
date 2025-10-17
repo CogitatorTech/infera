@@ -447,6 +447,43 @@ static void GetModelInfo(DataChunk &args, ExpressionState &state, Vector &result
 }
 
 /**
+ * @brief Implements the `infera_clear_cache()` SQL function.
+ *
+ * Clears the entire model cache directory, freeing up disk space.
+ *
+ * @param args The input arguments from DuckDB.
+ * @param state The expression state.
+ * @param result The result vector to populate.
+ */
+static void ClearCache(DataChunk &args, ExpressionState &state, Vector &result) {
+  int rc = infera::infera_clear_cache();
+  bool success = rc == 0;
+  if (!success) {
+    throw InvalidInputException("Failed to clear cache: " + GetInferaError());
+  }
+  result.SetVectorType(VectorType::CONSTANT_VECTOR);
+  ConstantVector::GetData<bool>(result)[0] = success;
+  ConstantVector::SetNull(result, false);
+}
+
+/**
+ * @brief Implements the `infera_get_cache_info()` SQL function.
+ *
+ * Returns cache statistics as a JSON string.
+ *
+ * @param args The input arguments from DuckDB.
+ * @param state The expression state.
+ * @param result The result vector to populate.
+ */
+static void GetCacheInfo(DataChunk &args, ExpressionState &state, Vector &result) {
+  char *cache_info_json = infera::infera_get_cache_info();
+  result.SetVectorType(VectorType::CONSTANT_VECTOR);
+  ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, cache_info_json);
+  ConstantVector::SetNull(result, false);
+  infera::infera_free(cache_info_json);
+}
+
+/**
  * @brief Registers all the Infera functions with DuckDB.
  *
  * This internal helper function is called by the extension loading mechanism to
@@ -477,6 +514,8 @@ static void LoadInternal(ExtensionLoader &loader) {
   loader.RegisterFunction(ScalarFunction("infera_get_version", {}, LogicalType::VARCHAR, GetVersion));
   loader.RegisterFunction(ScalarFunction("infera_set_autoload_dir", {LogicalType::VARCHAR}, LogicalType::VARCHAR, SetAutoloadDir));
   loader.RegisterFunction(ScalarFunction("infera_is_model_loaded", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, IsModelLoaded));
+  loader.RegisterFunction(ScalarFunction("infera_clear_cache", {}, LogicalType::BOOLEAN, ClearCache));
+  loader.RegisterFunction(ScalarFunction("infera_get_cache_info", {}, LogicalType::VARCHAR, GetCacheInfo));
 }
 
 void InferaExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }

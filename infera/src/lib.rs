@@ -277,6 +277,91 @@ pub extern "C" fn infera_get_version() -> *mut c_char {
     CString::new(json_str).unwrap_or_default().into_raw()
 }
 
+/// Clears the entire model cache directory.
+///
+/// This removes all cached remote models, freeing up disk space.
+///
+/// # Returns
+///
+/// * `0` on success.
+/// * `-1` on failure. Call `infera_last_error()` to get a descriptive error message.
+///
+/// # Safety
+///
+/// This function is safe to call at any time.
+#[no_mangle]
+pub extern "C" fn infera_clear_cache() -> i32 {
+    match http::clear_cache() {
+        Ok(()) => 0,
+        Err(e) => {
+            error::set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Returns cache statistics as a JSON string.
+///
+/// The JSON object includes:
+/// * `"cache_dir"`: The path to the cache directory.
+/// * `"total_size_bytes"`: Total size of cached models in bytes.
+/// * `"file_count"`: Number of cached model files.
+/// * `"size_limit_bytes"`: The configured cache size limit.
+///
+/// # Returns
+///
+/// A pointer to a heap-allocated, null-terminated C string containing the cache info.
+/// The caller is responsible for freeing this string using `infera_free`.
+///
+/// # Safety
+///
+/// The returned pointer must be freed with `infera_free` to avoid memory leaks.
+#[no_mangle]
+pub extern "C" fn infera_get_cache_info() -> *mut c_char {
+    let result = (|| -> Result<serde_json::Value, error::InferaError> {
+        let cache_dir = http::cache_dir();
+        let cache_dir_str = cache_dir.to_string_lossy().to_string();
+
+        let mut total_size = 0u64;
+        let mut file_count = 0usize;
+
+        if cache_dir.exists() {
+            for entry in
+                fs::read_dir(&cache_dir).map_err(|e| error::InferaError::IoError(e.to_string()))?
+            {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("onnx") {
+                        if let Ok(metadata) = fs::metadata(&path) {
+                            total_size += metadata.len();
+                            file_count += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        let size_limit = env::var("INFERA_CACHE_SIZE_LIMIT")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(1024 * 1024 * 1024);
+
+        Ok(json!({
+            "cache_dir": cache_dir_str,
+            "total_size_bytes": total_size,
+            "file_count": file_count,
+            "size_limit_bytes": size_limit,
+        }))
+    })();
+
+    let final_json = result.unwrap_or_else(|e| {
+        error::set_last_error(&e);
+        json!({"error": e.to_string()})
+    });
+    let json_str = serde_json::to_string(&final_json).unwrap_or_default();
+    CString::new(json_str).unwrap_or_default().into_raw()
+}
+
 /// Scans a directory for `.onnx` files and loads them into Infera automatically.
 ///
 /// The name for each model is derived from its filename (without the extension).

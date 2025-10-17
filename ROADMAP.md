@@ -18,7 +18,7 @@ It outlines features to be implemented and their current status.
     * [x] Single `FLOAT` scalar output.
     * [x] Multiple `FLOAT` outputs as a `VARCHAR` containing JSON.
     * [x] Multiple `FLOAT` outputs as a `LIST[FLOAT]`.
-    * [ ] Return multiple outputs as a `STRUCT`.
+    * [ ] Return multiple outputs as a `STRUCT` (requires table functions for dynamic schemas).
 * **Batch Processing**
     * [x] Inference on batches for models with dynamic dimensions.
     * [ ] Automatic batch splitting for models with a fixed batch size.
@@ -34,7 +34,7 @@ It outlines features to be implemented and their current status.
     * [x] List loaded models.
     * [x] Get model metadata as a JSON object.
     * [x] Check if a model is currently loaded.
-    * [ ] Cache eviction policies for remote models.
+    * [x] Cache eviction policies for remote models.
 
 ### 3. Performance and Concurrency
 
