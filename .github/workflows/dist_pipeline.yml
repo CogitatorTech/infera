@@ -30,3 +30,34 @@ jobs:
       extension_name: infera
       enable_rust: true
       exclude_archs: "windows_amd64_mingw;osx_amd64;wasm_mvp;wasm_eh;wasm_threads"
+
+  create-release-draft:
+    name: Create Draft Release with Built Binaries
+    needs:
+      - duckdb-stable-build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download All Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: List Artifacts
+        run: |
+          echo "Downloaded artifacts to: $(pwd)/dist"
+          ls -la dist || true
+          find dist -type f -maxdepth 2 -print || true
+      - name: Create Draft Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: Infera ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
