@@ -18,7 +18,6 @@ It outlines features to be implemented and their current status.
     * [x] Single `FLOAT` scalar output.
     * [x] Multiple `FLOAT` outputs as a `VARCHAR` containing JSON.
     * [x] Multiple `FLOAT` outputs as a `LIST[FLOAT]`.
-    * [ ] Return multiple outputs as a `STRUCT` (requires table functions for dynamic schemas).
 * **Batch Processing**
     * [x] Inference on batches for models with dynamic dimensions.
     * [ ] Automatic batch splitting for models with a fixed batch size.

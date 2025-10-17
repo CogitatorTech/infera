@@ -20,7 +20,7 @@ The table below includes the information about all SQL functions exposed by Infe
 
 > [!NOTE]
 > The `features...` arguments accept `FLOAT` as well as values from `DOUBLE`, `INTEGER`, `BIGINT`, and `DECIMAL`
-> columns (casted to floats under the hood).
+> columns (all casted to floats under the hood).
 
 ---
 
@@ -184,6 +184,10 @@ You also need to have Rust (nightly version) and Cargo installed.
 > - `./build/release/extension/infera/infera.duckdb_extension`: this is the loadable extension file for Infera.
 
 ---
+
+### Configuration
+
+See [CONFIGURATION.md](CONFIGURATION.md) for more information about how to configure various settings for Infera.
 
 ### Architecture
 

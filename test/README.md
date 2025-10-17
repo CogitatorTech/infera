@@ -35,4 +35,4 @@ What this does:
 ```
 
 > [!NOTE]
-> The harness path contains `/test/unittest`; keep the quote mark if your shell expands slashes oddly.
+> The harness path contains `/test/unittest`; keep the quote mark if your shell expands slashes weirdly.

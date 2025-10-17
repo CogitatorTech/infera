@@ -7,6 +7,7 @@ use std::ffi::{c_char, CStr, CString};
 use std::fs;
 
 // Declare the internal modules
+mod config;
 mod engine;
 mod error;
 mod ffi_utils;
@@ -266,8 +267,7 @@ pub extern "C" fn infera_get_loaded_models() -> *mut c_char {
 /// The returned pointer must be freed with `infera_free` to avoid memory leaks.
 #[no_mangle]
 pub extern "C" fn infera_get_version() -> *mut c_char {
-    let cache_dir = env::temp_dir().join("infera_cache");
-    let cache_dir_str = cache_dir.to_string_lossy().to_string();
+    let cache_dir_str = config::CONFIG.cache_dir.to_string_lossy().to_string();
     let info = json!({
         "version": env!("CARGO_PKG_VERSION"),
         "onnx_backend": if cfg!(feature = "tract") { "tract" } else { "disabled" },

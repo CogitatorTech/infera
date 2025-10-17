@@ -1,16 +1,16 @@
 // src/http.rs
 // Handles downloading and caching of remote models.
 
+use crate::config::{LogLevel, CONFIG};
 use crate::error::InferaError;
+use crate::log;
 use sha2::{Digest, Sha256};
 use std::env;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
-
-// Default cache size limit: 1GB
-const DEFAULT_CACHE_SIZE_LIMIT_BYTES: u64 = 1024 * 1024 * 1024;
+use std::thread;
+use std::time::{Duration, SystemTime};
 
 /// A guard that guarantees a temporary file is deleted when it goes out of scope.
 /// This is used to implement a panic-safe cleanup of partial downloads.
@@ -46,15 +46,12 @@ impl<'a> Drop for TempFileGuard<'a> {
 
 /// Return the cache directory path used by Infera for remote models.
 pub(crate) fn cache_dir() -> PathBuf {
-    env::temp_dir().join("infera_cache")
+    CONFIG.cache_dir.clone()
 }
 
 /// Gets the cache size limit in bytes from environment variable or default.
 fn get_cache_size_limit() -> u64 {
-    env::var("INFERA_CACHE_SIZE_LIMIT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_CACHE_SIZE_LIMIT_BYTES)
+    CONFIG.cache_size_limit
 }
 
 /// Updates the access time of a cached file by touching it.
@@ -153,6 +150,8 @@ pub(crate) fn clear_cache() -> Result<(), InferaError> {
 /// The cache uses an LRU (Least Recently Used) eviction policy with a configurable
 /// size limit (default 1GB, configurable via INFERA_CACHE_SIZE_LIMIT env var).
 ///
+/// Downloads support automatic retries with exponential backoff.
+///
 /// # Arguments
 ///
 /// * `url` - The HTTP/HTTPS URL of the ONNX model to be downloaded.
@@ -166,6 +165,7 @@ pub(crate) fn clear_cache() -> Result<(), InferaError> {
 pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
     let cache_dir = cache_dir();
     if !cache_dir.exists() {
+        log!(LogLevel::Info, "Creating cache directory: {:?}", cache_dir);
         fs::create_dir_all(&cache_dir).map_err(|e| InferaError::CacheDirError(e.to_string()))?;
     }
     let mut hasher = Sha256::new();
@@ -174,34 +174,102 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
     let cached_path = cache_dir.join(format!("{}.onnx", hash_hex));
 
     if cached_path.exists() {
+        log!(LogLevel::Info, "Cache hit for URL: {}", url);
         // Update access time for LRU tracking
         touch_cache_file(&cached_path)?;
         return Ok(cached_path);
     }
 
+    log!(
+        LogLevel::Info,
+        "Cache miss for URL: {}, downloading...",
+        url
+    );
+
     let temp_path = cached_path.with_extension("onnx.part");
     let mut guard = TempFileGuard::new(&temp_path);
 
-    let mut response = reqwest::blocking::get(url)
+    // Download with retry logic
+    let max_attempts = CONFIG.http_retry_attempts;
+    let retry_delay_ms = CONFIG.http_retry_delay_ms;
+    let timeout_secs = CONFIG.http_timeout_secs;
+
+    let mut last_error = None;
+
+    for attempt in 1..=max_attempts {
+        log!(
+            LogLevel::Debug,
+            "Download attempt {}/{} for {}",
+            attempt,
+            max_attempts,
+            url
+        );
+
+        match download_file(url, &temp_path, timeout_secs) {
+            Ok(_) => {
+                log!(LogLevel::Info, "Successfully downloaded: {}", url);
+
+                // Check file size and evict cache if needed
+                let file_size = fs::metadata(&temp_path)
+                    .map_err(|e| InferaError::IoError(e.to_string()))?
+                    .len();
+
+                log!(LogLevel::Debug, "Downloaded file size: {} bytes", file_size);
+                evict_cache_if_needed(file_size)?;
+
+                fs::rename(&temp_path, &cached_path)
+                    .map_err(|e| InferaError::IoError(e.to_string()))?;
+
+                guard.commit();
+                return Ok(cached_path);
+            }
+            Err(e) => {
+                log!(
+                    LogLevel::Warn,
+                    "Download attempt {}/{} failed: {}",
+                    attempt,
+                    max_attempts,
+                    e
+                );
+                last_error = Some(e);
+
+                // Don't sleep after the last attempt
+                if attempt < max_attempts {
+                    let delay = Duration::from_millis(retry_delay_ms * attempt as u64);
+                    log!(LogLevel::Debug, "Waiting {:?} before retry", delay);
+                    thread::sleep(delay);
+                }
+            }
+        }
+    }
+
+    log!(
+        LogLevel::Error,
+        "Failed to download after {} attempts: {}",
+        max_attempts,
+        url
+    );
+    Err(last_error.unwrap_or_else(|| InferaError::HttpRequestError("Unknown error".to_string())))
+}
+
+/// Download a file from a URL to a local path with timeout
+fn download_file(url: &str, dest: &Path, timeout_secs: u64) -> Result<(), InferaError> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|e| InferaError::HttpRequestError(e.to_string()))?;
+
+    let mut response = client
+        .get(url)
+        .send()
         .map_err(|e| InferaError::HttpRequestError(e.to_string()))?
         .error_for_status()
         .map_err(|e| InferaError::HttpRequestError(e.to_string()))?;
 
-    let mut temp_file =
-        File::create(&temp_path).map_err(|e| InferaError::IoError(e.to_string()))?;
-    io::copy(&mut response, &mut temp_file).map_err(|e| InferaError::IoError(e.to_string()))?;
+    let mut file = File::create(dest).map_err(|e| InferaError::IoError(e.to_string()))?;
+    io::copy(&mut response, &mut file).map_err(|e| InferaError::IoError(e.to_string()))?;
 
-    // Check file size and evict cache if needed
-    let file_size = fs::metadata(&temp_path)
-        .map_err(|e| InferaError::IoError(e.to_string()))?
-        .len();
-    evict_cache_if_needed(file_size)?;
-
-    fs::rename(&temp_path, &cached_path).map_err(|e| InferaError::IoError(e.to_string()))?;
-
-    guard.commit();
-
-    Ok(cached_path)
+    Ok(())
 }
 
 #[cfg(test)]
