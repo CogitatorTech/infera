@@ -2,21 +2,21 @@
 
 The table below includes the information about all SQL functions exposed by Infera.
 
-| #  | Function                                                     | Return Type      | Description                                                                                                                                 |
-|----|:-------------------------------------------------------------|:-----------------|:--------------------------------------------------------------------------------------------------------------------------------------------|
-| 1  | `infera_load_model(name VARCHAR, path_or_url VARCHAR)`       | `BOOLEAN`        | Loads an ONNX model from a local file path or a remote URL and assigns it a unique name. Returns `true` on success.                         |
-| 2  | `infera_unload_model(name VARCHAR)`                          | `BOOLEAN`        | Unloads a model, freeing its associated resources. Returns `true` on success.                                                               |
-| 3  | `infera_set_autoload_dir(path VARCHAR)`                      | `VARCHAR (JSON)` | Scans a directory for `.onnx` files, loads them automatically, and returns a JSON report of loaded models and any errors.                   |
-| 4  | `infera_get_loaded_models()`                                 | `VARCHAR (JSON)` | Returns a JSON array containing the names of all currently loaded models.                                                                   |
+| #  | Function                                                     | Return Type      | Description                                                                                                                                               |
+|----|:-------------------------------------------------------------|:-----------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1  | `infera_load_model(name VARCHAR, path_or_url VARCHAR)`       | `BOOLEAN`        | Loads an ONNX model from a local file path or a remote URL and assigns it a unique name. Returns `true` on success.                                       |
+| 2  | `infera_unload_model(name VARCHAR)`                          | `BOOLEAN`        | Unloads a model, freeing its associated resources. Returns `true` on success.                                                                             |
+| 3  | `infera_set_autoload_dir(path VARCHAR)`                      | `VARCHAR (JSON)` | Scans a directory for `.onnx` files, loads them automatically, and returns a JSON report of loaded models and any errors.                                 |
+| 4  | `infera_get_loaded_models()`                                 | `VARCHAR (JSON)` | Returns a JSON array containing the names of all currently loaded models.                                                                                 |
 | 5  | `infera_get_model_info(name VARCHAR)`                        | `VARCHAR (JSON)` | Returns a JSON object with metadata about a specific loaded model (name, input/output shapes). If the model is not loaded, this function raises an error. |
-| 6  | `infera_predict(name VARCHAR, features... FLOAT)`            | `FLOAT`          | Performs inference on a batch of data, returning a single float value for each input row.                                                   |
-| 7  | `infera_predict_multi(name VARCHAR, features... FLOAT)`      | `VARCHAR (JSON)` | Performs inference and returns all outputs as a JSON-encoded array. This is useful for models that produce multiple predictions per sample. |
-| 8  | `infera_predict_multi_list(name VARCHAR, features... FLOAT)` | `LIST[FLOAT]`    | Performs inference and returns all outputs as a typed list of floats. Useful for multi-output models without JSON parsing.                  |
-| 9  | `infera_predict_from_blob(name VARCHAR, data BLOB)`          | `LIST[FLOAT]`    | Performs inference on raw `BLOB` data (for example, used for an image tensor), returning the result as a list of floats.                    |
-| 10 | `infera_is_model_loaded(name VARCHAR)`                       | `BOOLEAN`        | Returns `true` if the given model is currently loaded, otherwise `false`.                                                                   |
-| 11 | `infera_get_version()`                                       | `VARCHAR (JSON)` | Returns a JSON object with version and build information for the Infera extension.                                                          |
-| 12 | `infera_clear_cache()`                                       | `BOOLEAN`        | Clears the entire model cache directory, freeing up disk space. Returns `true` on success.                                                  |
-| 13 | `infera_get_cache_info()`                                    | `VARCHAR (JSON)` | Returns cache statistics including directory path, total size in bytes, file count, and configured size limit.                              |
+| 6  | `infera_predict(name VARCHAR, features... FLOAT)`            | `FLOAT`          | Performs inference on a batch of data, returning a single float value for each input row.                                                                 |
+| 7  | `infera_predict_multi(name VARCHAR, features... FLOAT)`      | `VARCHAR (JSON)` | Performs inference and returns all outputs as a JSON-encoded array. This is useful for models that produce multiple predictions per sample.               |
+| 8  | `infera_predict_multi_list(name VARCHAR, features... FLOAT)` | `LIST[FLOAT]`    | Performs inference and returns all outputs as a typed list of floats. Useful for multi-output models without JSON parsing.                                |
+| 9  | `infera_predict_from_blob(name VARCHAR, data BLOB)`          | `LIST[FLOAT]`    | Performs inference on raw `BLOB` data (for example, used for an image tensor), returning the result as a list of floats.                                  |
+| 10 | `infera_is_model_loaded(name VARCHAR)`                       | `BOOLEAN`        | Returns `true` if the given model is currently loaded, otherwise `false`.                                                                                 |
+| 11 | `infera_get_version()`                                       | `VARCHAR (JSON)` | Returns a JSON object with version and build information for the Infera extension.                                                                        |
+| 12 | `infera_clear_cache()`                                       | `BOOLEAN`        | Clears the entire model cache directory, freeing up disk space. Returns `true` on success.                                                                |
+| 13 | `infera_get_cache_info()`                                    | `VARCHAR (JSON)` | Returns cache statistics including directory path, total size in bytes, file count, and configured size limit.                                            |
 
 > [!NOTE]
 > The `features...` arguments accept `FLOAT` as well as values from `DOUBLE`, `INTEGER`, `BIGINT`, and `DECIMAL`
