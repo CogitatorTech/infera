@@ -248,7 +248,16 @@ pub extern "C" fn infera_get_loaded_models() -> *mut c_char {
     let models = model::MODELS.read();
     let list: Vec<String> = models.keys().cloned().collect();
     let joined = serde_json::to_string(&list).unwrap_or_else(|_| "[]".to_string());
-    CString::new(joined).unwrap().into_raw()
+    match CString::new(joined) {
+        Ok(cstr) => cstr.into_raw(),
+        Err(_) => {
+            // Fallback to empty JSON array if string contains null bytes
+            match CString::new("[]") {
+                Ok(cstr) => cstr.into_raw(),
+                Err(_) => std::ptr::null_mut(), // This should never happen with "[]"
+            }
+        }
+    }
 }
 
 /// Returns a JSON string with version and build information about the Infera library.
