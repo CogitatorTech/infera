@@ -68,7 +68,7 @@ load infera;
 
 #### Build from Source
 
-Alternatively, you can build Infera from source and use it with DuckDB by following these steps:
+Alternatively, you can build Infera from source and use it by following these steps:
 
 1. Clone the repository and build the Infera extension from source:
 
@@ -95,8 +95,6 @@ make release
 
 
 #### Trying Infera
-
-You can now try Infera out by running the following SQL commands in the DuckDB shell:
 
 ```sql
 -- Normally, we need to load the extension first,
