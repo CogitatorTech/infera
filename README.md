@@ -58,7 +58,7 @@ See the [ROADMAP.md](ROADMAP.md) for the list of implemented and planned feature
 #### Install from Community Extensions Repository
 
 You can install and load Infera from
-the [DuckDB community extensions](https://duckdb.org/community_extensions/list_of_extensions) repository by running the
+the [DuckDB community extensions](https://duckdb.org/community_extensions/extensions/infera) repository by running the
 following SQL commands in the DuckDB shell:
 
 ```sql
@@ -97,10 +97,9 @@ make release
 #### Trying Infera
 
 ```sql
--- Normally, we need to load the extension first,
--- but the `duckdb` binary that we built in the previous step
--- already has Infera statically linked to it.
--- So, we don't need to load the extension explicitly.
+-- 0. Install and load Infera (skip this step if you built from source and ran `./build/release/duckdb`)
+install infera from community;
+load infera;
 
 -- 1. Load a simple linear model from a remote URL
 select infera_load_model('linear_model',
