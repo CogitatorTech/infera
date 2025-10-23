@@ -214,10 +214,7 @@ pub(crate) fn run_inference_blob_impl(
         .chunks_exact(4)
         .map(|chunk| {
             // SAFETY: chunks_exact(4) guarantees exactly 4 bytes, so this conversion cannot fail
-            let array: [u8; 4] = match chunk.try_into() {
-                Ok(arr) => arr,
-                Err(_) => [0u8; 4], // This branch is unreachable but satisfies clippy
-            };
+            let array: [u8; 4] = chunk.try_into().unwrap_or_default();
             f32::from_ne_bytes(array)
         })
         .collect();
