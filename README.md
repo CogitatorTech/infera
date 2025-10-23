@@ -97,7 +97,8 @@ make release
 #### Trying Infera
 
 ```sql
--- 0. Install and load Infera (skip this step if you built from source and ran `./build/release/duckdb`)
+-- 0. Install and load Infera 
+-- Skip this step if you built from source and ran `./build/release/duckdb`
 install infera from community;
 load infera;
 
