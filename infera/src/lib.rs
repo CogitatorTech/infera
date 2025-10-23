@@ -1,4 +1,3 @@
-// src/lib.rs
 // The public C API layer and module declarations.
 
 use serde_json::json;

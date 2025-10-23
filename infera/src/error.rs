@@ -1,4 +1,3 @@
-// src/error.rs
 // Contains the InferaError enum and thread-local error handling logic.
 
 use std::cell::RefCell;

@@ -1,4 +1,3 @@
-// src/http.rs
 // Handles downloading and caching of remote models.
 
 use crate::config::{LogLevel, CONFIG};

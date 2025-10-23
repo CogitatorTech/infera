@@ -1,4 +1,3 @@
-// src/model.rs
 // Defines the internal representation of a model and the global model store.
 
 use once_cell::sync::Lazy;

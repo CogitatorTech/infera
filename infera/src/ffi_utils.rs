@@ -1,4 +1,3 @@
-// src/ffi_utils.rs
 // Contains C-compatible structs and memory management functions for the FFI boundary.
 
 use std::ffi::{c_char, CString};

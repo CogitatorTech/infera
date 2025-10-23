@@ -1,4 +1,3 @@
-// src/engine.rs
 // Contains the core ONNX inference logic using the Tract library.
 
 use crate::error::InferaError;
