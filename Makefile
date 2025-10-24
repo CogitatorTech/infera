@@ -61,12 +61,17 @@ rust-coverage: ## Generate code coverage report for Infera crate
 .PHONY: rust-lint
 rust-lint: rust-format ## Run linter checks on Rust files
 	@echo "Linting Rust files..."
-	@cargo clippy --manifest-path infera/Cargo.toml --features "tract" -- -D warnings
+	@cargo clippy --manifest-path infera/Cargo.toml --features "tract" -- -D warnings -D clippy::unwrap_used -D clippy::expect_used
 
 .PHONY: rust-fix-lint
 rust-fix-lint: ## Fix Rust linter warnings
 	@echo "Fixing linter warnings..."
-	@cargo clippy --fix --allow-dirty --allow-staged --manifest-path infera/Cargo.toml --features "tract" -- -D warnings
+	@cargo clippy --fix --allow-dirty --allow-staged --manifest-path infera/Cargo.toml --features "tract" -- -D warnings -D clippy::unwrap_used -D clippy::expect_used
+
+.PHONY: rust-careful
+careful: ## Run security checks on Rust code
+	@echo "Running security checks..."
+	@cargo careful
 
 .PHONY: rust-clean
 rust-clean: ## Clean Rust build artifacts
@@ -110,7 +115,7 @@ install-deps: ## Set up development environment (for Debian-based systems)
 	@echo "Setting up development environment..."
 	@sudo apt-get install -y cmake clang-format snap python3-pip
 	@sudo snap install rustup --classic
-	@cargo install cargo-tarpaulin cbindgen cargo-edit cargo-audit cargo-outdated
+	@cargo install cargo-tarpaulin cbindgen cargo-edit cargo-audit cargo-outdated cargo-careful
 	@cd infera && cargo check --features "tract"
 	@git submodule update --init --recursive
 	@pip install --user --upgrade pip uv

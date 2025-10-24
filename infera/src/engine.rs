@@ -1,4 +1,3 @@
-// src/engine.rs
 // Contains the core ONNX inference logic using the Tract library.
 
 use crate::error::InferaError;
@@ -213,7 +212,11 @@ pub(crate) fn run_inference_blob_impl(
     let blob_bytes = unsafe { std::slice::from_raw_parts(blob_data, blob_len) };
     let float_vec: Vec<f32> = blob_bytes
         .chunks_exact(4)
-        .map(|chunk| f32::from_ne_bytes(chunk.try_into().unwrap()))
+        .map(|chunk| {
+            // SAFETY: chunks_exact(4) guarantees exactly 4 bytes, so this conversion cannot fail
+            let array: [u8; 4] = chunk.try_into().unwrap_or_default();
+            f32::from_ne_bytes(array)
+        })
         .collect();
     let expected_elements: usize = model
         .input_shape

@@ -1,4 +1,3 @@
-// src/config.rs
 // Centralized configuration management for Infera
 
 use once_cell::sync::Lazy;
