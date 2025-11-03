@@ -1,7 +1,7 @@
 {
     "name": "infera",
-    "version": "0.3.0",
-    "description": "Infera DuckDB Extension",
+    "version": "0.1.0",
+    "description": "Infera DuckDB Extension (C++ dependencies)",
     "dependencies": [
         {
             "name": "vcpkg-cmake",
