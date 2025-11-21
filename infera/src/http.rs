@@ -216,7 +216,7 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
                 let file_size = fs::metadata(&temp_path)
                     .map_err(|e| InferaError::IoError(e.to_string()))?
                     .len();
-                
+
                 log!(LogLevel::Debug, "Downloaded file size: {} bytes", file_size);
                 evict_cache_if_needed(file_size)?;
                 fs::rename(&temp_path, &cached_path)
@@ -230,7 +230,7 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
                 return Ok(cached_path);
             }
             Ok(Some((true, _))) => {
-                // first value is true, it mean the object in server is Not Modified, use cached file 
+                // first value is true, it mean the object in server is Not Modified, use cached file
                 log!(LogLevel::Info, "Cache hit for URL: {}", url);
 
                 // Update access time for LRU tracking
@@ -273,6 +273,7 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
         .unwrap_or_else(|| InferaError::HttpRequestError("Unknown download error".to_string())))
 }
 
+#[allow(clippy::needless_return)]
 fn download_file_with_etag(
     url: &str,
     dest: &Path,
@@ -292,7 +293,7 @@ fn download_file_with_etag(
         .error_for_status()
         .map_err(|e| InferaError::HttpRequestError(e.to_string()))?;
 
-    if etag != "" && response.status() == reqwest::StatusCode::NOT_MODIFIED {
+    if !etag.is_empty() && response.status() == reqwest::StatusCode::NOT_MODIFIED {
         // Not modified, no file write needed, return None etag
         return Ok(Some((true, etag.to_string())));
     }
@@ -524,7 +525,6 @@ mod tests {
         srv_handle.abort();
     }
 
-
     #[actix_web::test]
     async fn test_remote_model_download_and_cache_with_etag_disabled() {
         use std::net::TcpListener;
@@ -611,8 +611,6 @@ mod tests {
         // Cleanup server
         srv_handle.abort();
     }
-
-
 
     #[test]
     fn test_clear_cache_removes_files() {
