@@ -140,12 +140,12 @@ pub(crate) fn clear_cache() -> Result<(), InferaError> {
     Ok(())
 }
 
-// / Handles the download and caching of a remote model from a URL.
-// /
-// / If the model for the given URL is already present in the local cache, this
-// / function updates its access time and returns the path. Otherwise, it downloads
-// / the file, evicts old cache entries if needed, stores it in the cache directory,
-// / and then returns the path.
+/// Handles downloading and caching a remote model from a URL.
+///
+/// If the model for the given URL is already present in the local cache and the ETag of this object
+/// has not changed since the last call, this function updates its access time and returns the path.
+/// Otherwise, it downloads the file, evicts old cache entries if needed, stores it in the cache directory,
+/// and then returns the path.
 // /
 // / The cache uses an LRU (Least Recently Used) eviction policy with a configurable
 // / size limit (default 1GB, configurable via INFERA_CACHE_SIZE_LIMIT env var).
@@ -256,7 +256,7 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
             }
             Ok(None) => {
                 // theoretically unreachable, but necessary to satisfy exhaustiveness
-                // Handle as error or log warning, or panic
+                // Handle as error 
                 log!(LogLevel::Error, "Can't exist None for this matching");
             }
         }
@@ -272,6 +272,27 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
     Err(last_error
         .unwrap_or_else(|| InferaError::HttpRequestError("Unknown download error".to_string())))
 }
+
+
+/// Downloads a file from a URL with ETag support for caching.
+///
+/// If the ETag is non-empty and the server responds with `304 Not Modified`,
+/// this function returns early with `(true, etag)` indicating no download.
+///
+/// Otherwise, it downloads the file to `dest`, updates the ETag if present,
+/// and returns `(false, new_etag)`.
+///
+/// # Arguments
+///
+/// * `url` - The URL to download from.
+/// * `dest` - The destination path to save the file.
+/// * `timeout_secs` - HTTP request timeout in seconds.
+/// * `etag` - Cached ETag string for conditional requests.
+///
+/// # Returns
+///
+/// `Result<Option<(bool, String)>, InferaError>` tuple where the boolean indicates
+/// if the file was not modified (true) and the string is the ETag.
 
 #[allow(clippy::needless_return)]
 fn download_file_with_etag(
