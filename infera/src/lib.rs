@@ -429,7 +429,7 @@ pub unsafe extern "C" fn infera_set_autoload_dir(path: *const c_char) -> *mut c_
 mod tests {
     use super::*;
     use std::ffi::CString;
-    use std::{fs, result};
+    use std::fs;
     use tempfile::tempdir;
 
     #[test]
