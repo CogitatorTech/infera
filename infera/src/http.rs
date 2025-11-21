@@ -1,4 +1,3 @@
-// Handles downloading and caching of remote models.
 
 use crate::config::{LogLevel, CONFIG};
 use crate::error::InferaError;
@@ -10,12 +9,40 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
+use reqwest::blocking::Client;
+use reqwest::header::{IF_NONE_MATCH, ETAG};
+use std::io::{Write};
+
+
+
+use axum::{
+    Router,
+    routing::get,
+    middleware,
+    body::StreamBody,
+    response::IntoResponse,
+};
+use std::net::SocketAddr;
+use tokio_util::io::ReaderStream;
+
+
+
+
+use bytes::Bytes;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tokio::runtime::Runtime;
+use tokio::time::sleep;
+
+
+
 /// A guard that guarantees a temporary file is deleted when it goes out of scope.
 /// This is used to implement a panic-safe cleanup of partial downloads.
 struct TempFileGuard<'a> {
     path: &'a Path,
     committed: bool,
 }
+
 
 impl<'a> TempFileGuard<'a> {
     /// Creates a new guard for the given path.
@@ -26,6 +53,7 @@ impl<'a> TempFileGuard<'a> {
         }
     }
 
+
     /// Marks the file as "committed," preventing its deletion on drop.
     /// This should be called only after the file has been successfully and
     /// atomically moved to its final destination.
@@ -33,6 +61,7 @@ impl<'a> TempFileGuard<'a> {
         self.committed = true;
     }
 }
+
 
 impl<'a> Drop for TempFileGuard<'a> {
     fn drop(&mut self) {
@@ -42,15 +71,18 @@ impl<'a> Drop for TempFileGuard<'a> {
     }
 }
 
+
 /// Return the cache directory path used by Infera for remote models.
 pub(crate) fn cache_dir() -> PathBuf {
     CONFIG.cache_dir.clone()
 }
 
+
 /// Gets the cache size limit in bytes from environment variable or default.
 fn get_cache_size_limit() -> u64 {
     CONFIG.cache_size_limit
 }
+
 
 /// Updates the access time of a cached file by touching it.
 fn touch_cache_file(path: &Path) -> Result<(), InferaError> {
@@ -61,12 +93,14 @@ fn touch_cache_file(path: &Path) -> Result<(), InferaError> {
     Ok(())
 }
 
+
 /// Gets metadata about cached files sorted by access time (oldest first).
 fn get_cached_files_by_access_time() -> Result<Vec<(PathBuf, SystemTime, u64)>, InferaError> {
     let dir = cache_dir();
     if !dir.exists() {
         return Ok(Vec::new());
     }
+
 
     let mut files = Vec::new();
     for entry in fs::read_dir(&dir)
@@ -83,10 +117,12 @@ fn get_cached_files_by_access_time() -> Result<Vec<(PathBuf, SystemTime, u64)>, 
         }
     }
 
+
     // Sort by access time, oldest first
     files.sort_by_key(|(_, time, _)| *time);
     Ok(files)
 }
+
 
 /// Calculates total cache size in bytes.
 fn get_cache_size() -> Result<u64, InferaError> {
@@ -94,30 +130,38 @@ fn get_cache_size() -> Result<u64, InferaError> {
     Ok(files.iter().map(|(_, _, size)| size).sum())
 }
 
+
 /// Evicts least recently used cache files until cache size is below limit.
 fn evict_cache_if_needed(required_space: u64) -> Result<(), InferaError> {
+    println!("evict_cache_if_needed");
     let limit = get_cache_size_limit();
     let current_size = get_cache_size()?;
+
 
     if current_size + required_space <= limit {
         return Ok(());
     }
 
+
     let target_size = limit.saturating_sub(required_space);
     let mut freed_size = 0u64;
     let files = get_cached_files_by_access_time()?;
+
 
     for (path, _, size) in files {
         if current_size - freed_size <= target_size {
             break;
         }
 
+        println!("consider to remove file: {:?}", path);
         fs::remove_file(&path).map_err(|e| InferaError::IoError(e.to_string()))?;
         freed_size += size;
     }
 
+
     Ok(())
 }
+
 
 /// Clears the entire cache directory by deleting its contents.
 /// If the directory does not exist, this is a no-op.
@@ -140,28 +184,31 @@ pub(crate) fn clear_cache() -> Result<(), InferaError> {
     Ok(())
 }
 
-/// Handles the download and caching of a remote model from a URL.
-///
-/// If the model for the given URL is already present in the local cache, this
-/// function updates its access time and returns the path. Otherwise, it downloads
-/// the file, evicts old cache entries if needed, stores it in the cache directory,
-/// and then returns the path.
-///
-/// The cache uses an LRU (Least Recently Used) eviction policy with a configurable
-/// size limit (default 1GB, configurable via INFERA_CACHE_SIZE_LIMIT env var).
-///
-/// Downloads support automatic retries with exponential backoff.
-///
-/// # Arguments
-///
-/// * `url` - The HTTP/HTTPS URL of the ONNX model to be downloaded.
-///
-/// # Returns
-///
-/// A `Result` which is:
-/// * `Ok(PathBuf)`: The local file path of the cached model.
-/// * `Err(InferaError)`: An error indicating failure in creating the cache directory,
-///   making the HTTP request, or writing the file to disk.
+
+
+
+// / Handles the download and caching of a remote model from a URL.
+// /
+// / If the model for the given URL is already present in the local cache, this
+// / function updates its access time and returns the path. Otherwise, it downloads
+// / the file, evicts old cache entries if needed, stores it in the cache directory,
+// / and then returns the path.
+// /
+// / The cache uses an LRU (Least Recently Used) eviction policy with a configurable
+// / size limit (default 1GB, configurable via INFERA_CACHE_SIZE_LIMIT env var).
+// /
+// / Downloads support automatic retries with exponential backoff.
+// /
+// / # Arguments
+// /
+// / * `url` - The HTTP/HTTPS URL of the ONNX model to be downloaded.
+// /
+// / # Returns
+// /
+// / A `Result` which is:
+// / * `Ok(PathBuf)`: The local file path of the cached model.
+// / * `Err(InferaError)`: An error indicating failure in creating the cache directory,
+// /   making the HTTP request, or writing the file to disk.
 pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
     let cache_dir = cache_dir();
     if !cache_dir.exists() {
@@ -180,21 +227,26 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
         return Ok(cached_path);
     }
 
+
     log!(
         LogLevel::Info,
         "Cache miss for URL: {}, downloading...",
         url
     );
 
+
     let temp_path = cached_path.with_extension("onnx.part");
     let mut guard = TempFileGuard::new(&temp_path);
+
 
     // Download with retry logic
     let max_attempts = CONFIG.http_retry_attempts;
     let retry_delay_ms = CONFIG.http_retry_delay_ms;
     let timeout_secs = CONFIG.http_timeout_secs;
 
+
     let mut last_error = None;
+
 
     for attempt in 1..=max_attempts {
         log!(
@@ -205,20 +257,25 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
             url
         );
 
+
         match download_file(url, &temp_path, timeout_secs) {
             Ok(_) => {
                 log!(LogLevel::Info, "Successfully downloaded: {}", url);
+
 
                 // Check file size and evict cache if needed
                 let file_size = fs::metadata(&temp_path)
                     .map_err(|e| InferaError::IoError(e.to_string()))?
                     .len();
 
+
                 log!(LogLevel::Debug, "Downloaded file size: {} bytes", file_size);
                 evict_cache_if_needed(file_size)?;
 
+
                 fs::rename(&temp_path, &cached_path)
                     .map_err(|e| InferaError::IoError(e.to_string()))?;
+
 
                 guard.commit();
                 return Ok(cached_path);
@@ -233,6 +290,7 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
                 );
                 last_error = Some(e);
 
+
                 // Don't sleep after the last attempt
                 if attempt < max_attempts {
                     let delay = Duration::from_millis(retry_delay_ms * attempt as u64);
@@ -243,6 +301,7 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
         }
     }
 
+
     log!(
         LogLevel::Error,
         "Failed to download after {} attempts: {}",
@@ -252,12 +311,17 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
     Err(last_error.unwrap_or_else(|| InferaError::HttpRequestError("Unknown error".to_string())))
 }
 
+
+
+
+
 /// Download a file from a URL to a local path with timeout
 fn download_file(url: &str, dest: &Path, timeout_secs: u64) -> Result<(), InferaError> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(timeout_secs))
         .build()
         .map_err(|e| InferaError::HttpRequestError(e.to_string()))?;
+
 
     let mut response = client
         .get(url)
@@ -266,25 +330,154 @@ fn download_file(url: &str, dest: &Path, timeout_secs: u64) -> Result<(), Infera
         .error_for_status()
         .map_err(|e| InferaError::HttpRequestError(e.to_string()))?;
 
+
     let mut file = File::create(dest).map_err(|e| InferaError::IoError(e.to_string()))?;
     io::copy(&mut response, &mut file).map_err(|e| InferaError::IoError(e.to_string()))?;
+
 
     Ok(())
 }
 
+
+pub(crate) fn handle_remote_model_3(url: &str) -> Result<PathBuf, InferaError> {
+    let max_attempts = CONFIG.http_retry_attempts;
+    let retry_delay_ms = CONFIG.http_retry_delay_ms;
+    let timeout_secs = CONFIG.http_timeout_secs;
+
+    let cache_dir = cache_dir();
+    println!("Cache dir: {:?}", cache_dir);
+    println!("Handling remote model for URL: {}", url);
+    if !cache_dir.exists() {
+        fs::create_dir_all(&cache_dir).map_err(|e| InferaError::CacheDirError(e.to_string()))?;
+    }
+
+    // Compute cache key based on URL hash
+    let mut hasher = Sha256::new();
+    hasher.update(url.as_bytes());
+    let hash_hex = hex::encode(hasher.finalize());
+    let cached_path = cache_dir.join(format!("{}.onnx", hash_hex));
+    let etag_path = cache_dir.join(format!("{}.etag", hash_hex));
+
+    // Load cached ETag if available
+    let etag_trimmed = match fs::read_to_string(&etag_path) {
+        Ok(etag_value) => etag_value.trim().to_string(),
+        Err(_) => "abc".to_string(),
+    };
+    println!("Using ETag for request: {}", etag_trimmed);
+
+    let temp_path = cached_path.with_extension("onnx.part");
+    let mut guard = TempFileGuard::new(&temp_path);
+
+    let mut last_error = None;
+
+    for attempt in 1..=max_attempts {
+        println!("Download attempt {}/{} for URL: {}", attempt, max_attempts, url);
+
+        // Perform download using helper function
+        match download_file_with_etag(url, &temp_path, timeout_secs, &etag_trimmed) {
+            Ok(response_etag) => {
+                println!("Download succeeded for URL: {}", url);
+                println!("response_etag: {:?}", response_etag);
+
+                if let Some(etag_str) = &response_etag {
+                    // Only if new file was downloaded:
+                    println!("temp_path: {:?}, cached_path: {:?}", temp_path, cached_path);
+                    let file_size = fs::metadata(&temp_path).map_err(|e| InferaError::IoError(e.to_string()))?.len();
+                    evict_cache_if_needed(file_size)?;
+                    fs::rename(&temp_path, &cached_path).map_err(|e| InferaError::IoError(e.to_string()))?;
+
+                    // Update ETag file
+                    fs::write(&etag_path, etag_str).map_err(|e| InferaError::IoError(e.to_string()))?;
+                } else {
+                    // 304 Not Modified response: update access time and use cached file
+                    touch_cache_file(&cached_path)?;
+                }
+
+                guard.commit();
+                return Ok(cached_path);
+            }
+            Err(e) => {
+                last_error = Some(e);
+                println!(
+                    "Download attempt {}/{} failed: {}",
+                    attempt,
+                    max_attempts,
+                    last_error.as_ref().unwrap()
+                );
+            }
+        }
+
+        if attempt < max_attempts {
+            let delay = Duration::from_millis(retry_delay_ms * 2_u64.pow((attempt - 1) as u32));
+            println!("Waiting {:?} before retry", delay);
+            std::thread::sleep(delay);
+        }
+    }
+
+    println!("Failed to download after {} attempts: {}", max_attempts, url);
+
+    Err(last_error.unwrap_or_else(|| InferaError::HttpRequestError("Unknown download error".to_string())))
+}
+
+fn download_file_with_etag(
+    url: &str,
+    dest: &Path,
+    timeout_secs: u64,
+    etag: &str,
+) -> Result<Option<String>, InferaError> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|e| InferaError::HttpRequestError(e.to_string()))?;
+
+    let mut request = client.get(url).header(IF_NONE_MATCH, etag);
+
+    let mut response = request
+        .send()
+        .map_err(|e| InferaError::HttpRequestError(e.to_string()))?
+        .error_for_status()
+        .map_err(|e| InferaError::HttpRequestError(e.to_string()))?;
+
+    println!("response.status(): {:?}", response.status());
+    if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+        // Not modified, no file write needed, return None etag
+        return Ok(None);
+    }
+    println!("prepare to create dest file: {:?}", dest);
+    let mut file = File::create(dest).map_err(|e| InferaError::IoError(e.to_string()))?;
+    io::copy(&mut response, &mut file).map_err(|e| InferaError::IoError(e.to_string()))?;
+
+    // Extract ETag header if present for updating cache metadata
+    let etag_header = response.headers().get(ETAG).and_then(|v| v.to_str().ok()).map(|s| s.to_owned());
+
+    Ok(etag_header)
+}
+
+
+fn get_file_modification_time(path: &std::path::Path) -> std::io::Result<SystemTime> {
+        let metadata = fs::metadata(path)?;
+        let modified_time = metadata.modified()?;
+        Ok(modified_time)
+    }
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::Server;
+    use axum::extract::path;
+    use hyper;
+    use mockito::{Server, ServerOpts};
     use std::env; // moved here: used in tests only
     use std::thread;
     use tiny_http::{Header, Response, Server as TinyServer};
-
+    use tokio::fs::File as TokioFile;
+    use actix_web::{web, App, HttpResponse, Error,HttpServer};
+    use actix_middleware_etag::Etag;
+    
     #[test]
     fn test_handle_remote_model_cleanup_on_incomplete_download() {
         let server = TinyServer::http("127.0.0.1:0").unwrap();
         let port = server.server_addr().to_ip().unwrap().port();
         let model_url = format!("http://127.0.0.1:{}/incomplete_model.onnx", port);
+
 
         let server_handle = thread::spawn(move || {
             if let Ok(request) = server.recv() {
@@ -295,23 +488,29 @@ mod tests {
             }
         });
 
+
         // The download should fail because the response body is shorter than the content-length.
-        let result = handle_remote_model(&model_url);
+        let result = handle_remote_model_3(&model_url);
         assert!(result.is_err());
+
 
         // Ensure no partial or final file is left in the cache.
         let cache_dir = env::temp_dir().join("infera_cache");
+        println!("Cache dir: {:?}", cache_dir);
         let mut hasher = Sha256::new();
         hasher.update(model_url.as_bytes());
         let hash_hex = hex::encode(hasher.finalize());
         let cached_path = cache_dir.join(format!("{}.onnx", hash_hex));
         let temp_path = cached_path.with_extension("onnx.part");
 
+
         assert!(!cached_path.exists(), "Final cache file should not exist");
         assert!(!temp_path.exists(), "Partial file should be cleaned up");
 
+
         server_handle.join().unwrap();
     }
+
 
     #[test]
     fn test_handle_remote_model_download_error() {
@@ -323,16 +522,20 @@ mod tests {
             .with_status(500)
             .create();
 
+
         let url = server.url();
         let model_url = format!("{}/server_error_model.onnx", url);
 
-        let result = handle_remote_model(&model_url);
+
+        let result = handle_remote_model_3(&model_url);
+
 
         // The download should fail because of the server error.
         assert!(
             result.is_err(),
             "handle_remote_model should return an error on 500 status"
         );
+
 
         // Ensure no partial or final file is left in the cache.
         let cache_dir = env::temp_dir().join("infera_cache");
@@ -342,15 +545,18 @@ mod tests {
         let cached_path = cache_dir.join(format!("{}.onnx", hash_hex));
         let temp_path = cached_path.with_extension("onnx.part");
 
+
         assert!(!cached_path.exists(), "Final cache file should not exist");
         assert!(!temp_path.exists(), "Partial file should be cleaned up");
     }
+
 
     #[test]
     fn test_handle_remote_model_cleanup_on_connection_drop() {
         let server = TinyServer::http("127.0.0.1:0").unwrap();
         let port = server.server_addr().to_ip().unwrap().port();
         let model_url = format!("http://127.0.0.1:{}/dropped_connection.onnx", port);
+
 
         let server_handle = thread::spawn(move || {
             if let Ok(request) = server.recv() {
@@ -366,12 +572,14 @@ mod tests {
             }
         });
 
+
         // The download should fail because the server closes the connection prematurely.
-        let result = handle_remote_model(&model_url);
+        let result = handle_remote_model_3(&model_url);
         assert!(
             result.is_err(),
             "The download should fail on a connection drop"
         );
+
 
         // After the failure, the temporary file should be cleaned up.
         let cache_dir = env::temp_dir().join("infera_cache");
@@ -381,38 +589,155 @@ mod tests {
         let cached_path = cache_dir.join(format!("{}.onnx", hash_hex));
         let temp_path = cached_path.with_extension("onnx.part");
 
+
         assert!(!cached_path.exists(), "Final cache file should not exist");
         assert!(
             !temp_path.exists(),
             "Partial file should be cleaned up after a connection drop"
         );
-
         server_handle.join().unwrap();
     }
 
-    #[test]
-    fn test_handle_remote_model_success_and_cache() {
-        // Serve a small body with an accurate Content-Length
-        let mut server = Server::new();
-        let body = b"onnxdata".to_vec();
-        let _m = server
-            .mock("GET", "/ok_model.onnx")
-            .with_status(200)
-            .with_header("Content-Length", &body.len().to_string())
-            .with_body(body.clone())
-            .create();
-        let url = format!("{}/ok_model.onnx", server.url());
 
-        let path1 = handle_remote_model(&url).expect("download should succeed");
-        assert!(path1.exists(), "cached file must exist");
+//     #[test]
+//     async fn test_handle_remote_model_success_and_cache() {
+//         // Serve a small body with an accurate Content-Length
+//         let mut server = Server::new();
+//         let body = b"onnxdata".to_vec();
+//         let _m = server
+//             .mock("GET", "/ok_model.onnx")
+//             .with_status(200)
+//             .with_header("Content-Length", &body.len().to_string())
+//             .with_body(body.clone())
+//             .create();
+//         let url = format!("{}/ok_model.onnx", server.url());
+
+
+//         let path1 = handle_remote_model(&url).expect("download should succeed");
+//         assert!(path1.exists(), "cached file must exist");
+//         let content1 = fs::read(&path1).expect("read cached file");
+//         assert_eq!(content1, body);
+
+
+//         // Second call should hit cache and return same path without network
+//         let path2 = handle_remote_model(&url).expect("cache should hit");
+//         assert_eq!(path1, path2);
+
+
+
+//         // Remove the old mock to simulate file removal
+//         server.reset(); // or server.delete_mock(m) if your mock library supports it
+
+
+//         // Create a new mock representing the updated file
+//         let updated_body = b"new_onnx_data".to_vec();
+//         let _m2 = server
+//         .mock("GET", "/ok_model.onnx")
+//         .with_status(200)
+//         .with_header("Content-Length", &updated_body.len().to_string())
+//         .with_body(updated_body.clone())
+//         .create();
+
+
+//         let path3 = handle_remote_model(&url).expect("download should succeed");
+//         assert!(path3.exists(), "cached file must exist");
+//         let content3 = fs::read(&path3).expect("read cached file");
+//         assert_ne!(content1, content3, "content should changed due to caching invalidation");
+
+
+//         // let temp_path = path1.with_extension("onnx.part");
+//         // assert!(!temp_path.exists(), "no partial file should remain");
+
+
+
+
+//     }
+        
+        #[actix_web::test]
+        async fn test_handle_remote_model_3_with_actix_server() {
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
+        let addr = listener.local_addr().unwrap();
+
+        let file_content = Arc::new(RwLock::new(b"initial content".to_vec()));
+        let file_content_server = file_content.clone();
+
+        let server = HttpServer::new(move || {
+            let content = file_content_server.clone();
+            App::new()
+                .wrap(Etag::default())
+                .route("/model.onnx", web::get().to(move || {
+                    let content = content.clone();
+                    async move {
+                        let data = content.read().await;
+                        let bytes = Bytes::copy_from_slice(&*data);
+                        Ok::<_, Error>(
+                            HttpResponse::Ok()
+                                .content_type("application/octet-stream")
+                                .body(bytes),
+                        )
+                    }
+                }))
+        })
+        .listen(listener)
+        .expect("Failed to bind server")
+        .run();
+
+        // Spawn server in background
+        let srv_handle = actix_web::rt::spawn(server);
+
+        let url = format!("http://{}:{}/model.onnx", addr.ip(), addr.port());
+        let second_call_url = url.clone();
+        let third_call_url = url.clone();
+        // Call your blocking cache-and-download function in blocking task
+        let path1 = tokio::task::spawn_blocking(move || handle_remote_model_3(&url))
+            .await
+            .expect("Task panicked")
+            .expect("handle_remote_model_3 failed");
+
+        assert!(path1.exists());
         let content1 = fs::read(&path1).expect("read cached file");
-        assert_eq!(content1, body);
+        let path1_modification_time = get_file_modification_time(&path1).unwrap();
 
-        // Second call should hit cache and return same path without network
-        let path2 = handle_remote_model(&url).expect("cache should hit");
+        // Call again, should refresh cache
+        let path2 = tokio::task::spawn_blocking(move || handle_remote_model_3(&second_call_url))
+            .await
+            .expect("Task panicked")
+            .expect("handle_remote_model_3 failed");
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        let content2 = fs::read(&path2).expect("read cached file");
+        let path2_modification_time = get_file_modification_time(&path2).unwrap();
+
         assert_eq!(path1, path2);
-        let temp_path = path1.with_extension("onnx.part");
-        assert!(!temp_path.exists(), "no partial file should remain");
+        assert_eq!(content1, content2);
+        assert_eq!(path1_modification_time, path2_modification_time);
+
+
+        // Modify content to simulate update
+        {
+            let mut content_write = file_content.write().await;
+            *content_write = b"updated content".to_vec();
+        }
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        // Call again, should refresh cache
+        let path3 = tokio::task::spawn_blocking(move || handle_remote_model_3(&third_call_url))
+            .await
+            .expect("Task panicked")
+            .expect("handle_remote_model_3 failed");
+
+        let content3 = fs::read(&path3).expect("read cached file");
+        let path3_modification_time = get_file_modification_time(&path3).unwrap();
+        assert_eq!(path1, path3);
+        assert_ne!(content1, content3);
+        assert_ne!(path1_modification_time, path3_modification_time);
+
+        // Cleanup server
+        srv_handle.abort();
     }
 
     #[test]
