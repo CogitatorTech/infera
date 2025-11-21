@@ -96,7 +96,6 @@ fn get_cache_size() -> Result<u64, InferaError> {
 
 /// Evicts least recently used cache files until cache size is below limit.
 fn evict_cache_if_needed(required_space: u64) -> Result<(), InferaError> {
-    println!("evict_cache_if_needed");
     let limit = get_cache_size_limit();
     let current_size = get_cache_size()?;
 
@@ -113,7 +112,6 @@ fn evict_cache_if_needed(required_space: u64) -> Result<(), InferaError> {
             break;
         }
 
-        println!("consider to remove file: {:?}", path);
         fs::remove_file(&path).map_err(|e| InferaError::IoError(e.to_string()))?;
         freed_size += size;
     }
@@ -186,9 +184,8 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
     // Load cached ETag if available
     let etag_trimmed = match fs::read_to_string(&etag_path) {
         Ok(etag_value) => etag_value.trim().to_string(),
-        Err(_) => "abc".to_string(),
+        Err(_) => "".to_string(),
     };
-    println!("Using ETag for request: {}", etag_trimmed);
 
     let temp_path = cached_path.with_extension("onnx.part");
     let mut guard = TempFileGuard::new(&temp_path);
@@ -207,12 +204,20 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
         // Perform download using helper function
         match download_file_with_etag(url, &temp_path, timeout_secs, &etag_trimmed) {
             Ok(Some((false, etag_str))) => {
-                //  New file was downloaded (first value is false)
-                log!(LogLevel::Info, "Download succeeded for URL: {}", url);
+                // first value is false, it mean the object in server is new or changed, take the downloading
+                log!(
+                    LogLevel::Info,
+                    "Cache miss for URL: {}, downloading...",
+                    url
+                );
+
+                log!(LogLevel::Info, "Successfully downloaded: {}", url);
 
                 let file_size = fs::metadata(&temp_path)
                     .map_err(|e| InferaError::IoError(e.to_string()))?
                     .len();
+                
+                log!(LogLevel::Debug, "Downloaded file size: {} bytes", file_size);
                 evict_cache_if_needed(file_size)?;
                 fs::rename(&temp_path, &cached_path)
                     .map_err(|e| InferaError::IoError(e.to_string()))?;
@@ -225,7 +230,7 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
                 return Ok(cached_path);
             }
             Ok(Some((true, _))) => {
-                // status is 304 Not Modified, use cached file (first value is true)
+                // first value is true, it mean the object in server is Not Modified, use cached file 
                 log!(LogLevel::Info, "Cache hit for URL: {}", url);
 
                 // Update access time for LRU tracking
@@ -287,12 +292,10 @@ fn download_file_with_etag(
         .error_for_status()
         .map_err(|e| InferaError::HttpRequestError(e.to_string()))?;
 
-    println!("response.status(): {:?}", response.status());
     if etag != "" && response.status() == reqwest::StatusCode::NOT_MODIFIED {
         // Not modified, no file write needed, return None etag
         return Ok(Some((true, etag.to_string())));
     }
-    println!("prepare to create dest file: {:?}", dest);
     let mut file = File::create(dest).map_err(|e| InferaError::IoError(e.to_string()))?;
     io::copy(&mut response, &mut file).map_err(|e| InferaError::IoError(e.to_string()))?;
 
@@ -346,7 +349,6 @@ mod tests {
 
         // Ensure no partial or final file is left in the cache.
         let cache_dir = env::temp_dir().join("infera_cache");
-        println!("Cache dir: {:?}", cache_dir);
         let mut hasher = Sha256::new();
         hasher.update(model_url.as_bytes());
         let hash_hex = hex::encode(hasher.finalize());
@@ -436,7 +438,7 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn test_handle_remote_model_success_and_cache() {
+    async fn test_remote_model_download_and_cache_with_etag_enabled() {
         use std::net::TcpListener;
 
         let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
@@ -521,6 +523,96 @@ mod tests {
         // Cleanup server
         srv_handle.abort();
     }
+
+
+    #[actix_web::test]
+    async fn test_remote_model_download_and_cache_with_etag_disabled() {
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
+        let addr = listener.local_addr().unwrap();
+
+        let file_content = Arc::new(RwLock::new(b"initial content".to_vec()));
+        let file_content_server = file_content.clone();
+
+        let server = HttpServer::new(move || {
+            let content = file_content_server.clone();
+            App::new().route(
+                "/model.onnx",
+                web::get().to(move || {
+                    let content = content.clone();
+                    async move {
+                        let data = content.read().await;
+                        let bytes = Bytes::copy_from_slice(&*data);
+                        Ok::<_, Error>(
+                            HttpResponse::Ok()
+                                .content_type("application/octet-stream")
+                                .body(bytes),
+                        )
+                    }
+                }),
+            )
+        })
+        .listen(listener)
+        .expect("Failed to bind server")
+        .run();
+
+        // Spawn server in background
+        let srv_handle = actix_web::rt::spawn(server);
+
+        let url = format!("http://{}:{}/model.onnx", addr.ip(), addr.port());
+        let second_call_url = url.clone();
+        let third_call_url = url.clone();
+        // Call your blocking cache-and-download function in blocking task
+        let path1 = tokio::task::spawn_blocking(move || handle_remote_model(&url))
+            .await
+            .expect("Task panicked")
+            .expect("handle_remote_model failed");
+
+        assert!(path1.exists());
+        let content1 = fs::read(&path1).expect("read cached file");
+        let path1_modification_time = get_file_modification_time(&path1).unwrap();
+
+        // Call again, should refresh cache
+        let path2 = tokio::task::spawn_blocking(move || handle_remote_model(&second_call_url))
+            .await
+            .expect("Task panicked")
+            .expect("handle_remote_model failed");
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        let content2 = fs::read(&path2).expect("read cached file");
+        let path2_modification_time = get_file_modification_time(&path2).unwrap();
+
+        assert_eq!(path1, path2);
+        assert_eq!(content1, content2);
+        assert_ne!(path1_modification_time, path2_modification_time);
+
+        // Modify content to simulate update
+        {
+            let mut content_write = file_content.write().await;
+            *content_write = b"updated content".to_vec();
+        }
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        // Call again, should refresh cache
+        let path3 = tokio::task::spawn_blocking(move || handle_remote_model(&third_call_url))
+            .await
+            .expect("Task panicked")
+            .expect("handle_remote_model failed");
+
+        let content3 = fs::read(&path3).expect("read cached file");
+        let path3_modification_time = get_file_modification_time(&path3).unwrap();
+        assert_eq!(path1, path3);
+        assert_ne!(content1, content3);
+        assert_ne!(path1_modification_time, path3_modification_time);
+
+        // Cleanup server
+        srv_handle.abort();
+    }
+
+
 
     #[test]
     fn test_clear_cache_removes_files() {
