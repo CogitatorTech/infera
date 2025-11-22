@@ -212,7 +212,7 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
                 );
 
                 log!(LogLevel::Info, "Successfully downloaded: {}", url);
-
+                // Check file size and evict cache if needed
                 let file_size = fs::metadata(&temp_path)
                     .map_err(|e| InferaError::IoError(e.to_string()))?
                     .len();
@@ -248,6 +248,7 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
                     e
                 );
                 last_error = Some(e);
+                // Don't sleep after the last attempt
                 if attempt < max_attempts {
                     let delay = Duration::from_millis(retry_delay_ms * attempt as u64);
                     log!(LogLevel::Debug, "Waiting {:?} before retry", delay);
@@ -313,7 +314,7 @@ fn download_file_with_etag(
         .map_err(|e| InferaError::HttpRequestError(e.to_string()))?;
 
     if !etag.is_empty() && response.status() == reqwest::StatusCode::NOT_MODIFIED {
-        // Not modified, no file write needed, return None etag
+        // Not modified, no file write needed, return true and etag
         return Ok(Some((true, etag.to_string())));
     }
     let mut file = File::create(dest).map_err(|e| InferaError::IoError(e.to_string()))?;

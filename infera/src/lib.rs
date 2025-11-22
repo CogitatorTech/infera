@@ -338,7 +338,6 @@ pub extern "C" fn infera_get_cache_info() -> *mut c_char {
                 .flatten()
             {
                 let path = entry.path();
-                println!("path: {:?}", path);
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("onnx") {
                     if let Ok(metadata) = fs::metadata(&path) {
                         total_size += metadata.len();
@@ -438,7 +437,6 @@ mod tests {
         let version_json = unsafe { CStr::from_ptr(version_ptr).to_str().unwrap() };
         let version_data: serde_json::Value = serde_json::from_str(version_json).unwrap();
 
-        println!("version_data {:?}", version_data);
         assert!(version_data["version"].is_string());
         assert!(version_data["onnx_backend"].is_string());
         assert!(version_data["model_cache_dir"].is_string());
@@ -456,7 +454,6 @@ mod tests {
         let result_ptr = unsafe { infera_set_autoload_dir(path_cstr.as_ptr()) };
         let result_json = unsafe { CStr::from_ptr(result_ptr).to_str().unwrap() };
         let result_data: serde_json::Value = serde_json::from_str(result_json).unwrap();
-        println!("result_data {:?}", result_data);
         assert_eq!(result_data["loaded"].as_array().unwrap().len(), 1);
         assert_eq!(result_data["loaded"][0], "linear");
         assert_eq!(result_data["errors"].as_array().unwrap().len(), 0);
@@ -472,7 +469,6 @@ mod tests {
         let result_ptr = unsafe { infera_set_autoload_dir(path_cstr.as_ptr()) };
         let result_json = unsafe { CStr::from_ptr(result_ptr).to_str().unwrap() };
         let result_data: serde_json::Value = serde_json::from_str(result_json).unwrap();
-        println!("result_data {:?}", result_data);
         assert!(result_data["error"].is_string());
 
         unsafe { infera_free(result_ptr) };
@@ -489,7 +485,6 @@ mod tests {
         let result_json = unsafe { CStr::from_ptr(result_ptr).to_str().unwrap() };
         let result_data: serde_json::Value = serde_json::from_str(result_json).unwrap();
 
-        println!("result_data {:?}", result_data);
         assert_eq!(result_data["loaded"].as_array().unwrap().len(), 0);
         assert_eq!(result_data["errors"].as_array().unwrap().len(), 1);
         assert_eq!(
@@ -650,9 +645,7 @@ mod tests {
     fn test_infera_get_cache_info_includes_configured_limit() {
         let cache_info_ptr = infera_get_cache_info();
         let cache_info_json = unsafe { CStr::from_ptr(cache_info_ptr).to_str().unwrap() };
-        println!("cache_info_json: {:?}", cache_info_json);
         let value: serde_json::Value = serde_json::from_str(cache_info_json).unwrap();
-        println!("value: {:?}", value);
         let size_limit = value["size_limit_bytes"]
             .as_u64()
             .expect("size_limit_bytes should be u64");
