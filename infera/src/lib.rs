@@ -454,6 +454,7 @@ mod tests {
         let result_ptr = unsafe { infera_set_autoload_dir(path_cstr.as_ptr()) };
         let result_json = unsafe { CStr::from_ptr(result_ptr).to_str().unwrap() };
         let result_data: serde_json::Value = serde_json::from_str(result_json).unwrap();
+
         assert_eq!(result_data["loaded"].as_array().unwrap().len(), 1);
         assert_eq!(result_data["loaded"][0], "linear");
         assert_eq!(result_data["errors"].as_array().unwrap().len(), 0);
@@ -469,6 +470,7 @@ mod tests {
         let result_ptr = unsafe { infera_set_autoload_dir(path_cstr.as_ptr()) };
         let result_json = unsafe { CStr::from_ptr(result_ptr).to_str().unwrap() };
         let result_data: serde_json::Value = serde_json::from_str(result_json).unwrap();
+
         assert!(result_data["error"].is_string());
 
         unsafe { infera_free(result_ptr) };
