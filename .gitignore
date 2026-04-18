@@ -95,3 +95,5 @@ _rust.h
 uv.lock
 tests/temp_models/
 *.cast
+.claude/
+.codex
