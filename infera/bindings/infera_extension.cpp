@@ -23,6 +23,11 @@
 
 namespace duckdb {
 
+template <typename T>
+static T *GetFlatVectorDataWritable(Vector &vector) {
+  return const_cast<T *>(FlatVector::GetData<T>(vector));
+}
+
 /**
  * @brief Retrieves the last error message from the Infera Rust core.
  * @return A string containing the error message, or "unknown error" if not set.
@@ -236,7 +241,7 @@ static void Predict(DataChunk &args, ExpressionState &state, Vector &result) {
     throw InvalidInputException(err_msg);
   }
   result.SetVectorType(VectorType::FLAT_VECTOR);
-  auto result_data = FlatVector::GetData<float>(result);
+  auto result_data = GetFlatVectorDataWritable<float>(result);
   for (idx_t i = 0; i < batch_size; i++) {
     result_data[i] = res.data[i];
   }
@@ -355,7 +360,7 @@ static void PredictMulti(DataChunk &args, ExpressionState &state, Vector &result
     throw InvalidInputException(err_msg);
   }
   result.SetVectorType(VectorType::FLAT_VECTOR);
-  auto result_data = FlatVector::GetData<string_t>(result);
+  auto result_data = GetFlatVectorDataWritable<string_t>(result);
   const size_t output_cols = res.cols;
   for (idx_t row_idx = 0; row_idx < batch_size; row_idx++) {
     std::ostringstream oss;
