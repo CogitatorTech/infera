@@ -8,7 +8,7 @@
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/CogitatorTech/infera/tests.yml?label=tests&style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/infera/actions/workflows/tests.yml)
 [![Examples](https://img.shields.io/badge/examples-view-green?style=flat&labelColor=282c34&logo=github)](https://github.com/CogitatorTech/infera/tree/main/docs/examples)
-[![Docs](https://img.shields.io/badge/docs-view-blue?style=flat&labelColor=282c34&logo=read-the-docs)](https://github.com/CogitatorTech/infera/tree/main/docs)
+[![Docs](https://img.shields.io/badge/docs-read-blue?style=flat&labelColor=282c34&logo=read-the-docs)](https://github.com/CogitatorTech/infera/tree/main/docs)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-007ec6?style=flat&labelColor=282c34&logo=open-source-initiative)](https://github.com/CogitatorTech/infera)
 
 In-Database Machine Learning for DuckDB
