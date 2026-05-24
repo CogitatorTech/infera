@@ -118,11 +118,11 @@ if (EXISTS ${INFERA_RUST_LIB})
         add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-lpthread>)
         add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-ldl>)
         add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-lm>)
-        if(APPLE)
-            add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-framework Security>)
-            add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-framework CoreFoundation>)
-            add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-framework SystemConfiguration>)
-        endif()
+        # Apple framework flags are NOT added via add_link_options: CMake splits
+        # "-framework Security" at the space inside generator expressions, producing
+        # the literal token '$<0:-framework' instead of an empty string. The frameworks
+        # are already propagated to all targets by link_libraries() and
+        # INTERFACE_LINK_LIBRARIES above, so no add_link_options entry is needed.
     else()
         add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:${INFERA_RUST_LIB}>)
     endif()
