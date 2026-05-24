@@ -97,3 +97,5 @@ tests/temp_models/
 *.cast
 .claude/
 .codex
+.antigravitycli/
+.agents/

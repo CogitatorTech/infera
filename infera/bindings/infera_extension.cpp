@@ -38,6 +38,25 @@ static std::string GetInferaError() {
 }
 
 /**
+ * @brief Creates a DuckDB scalar function with Infera execution metadata.
+ *
+ * Infera functions generally read or mutate model engine state, and many can
+ * raise runtime errors. The metadata prevents DuckDB from optimizing them as
+ * pure deterministic functions.
+ */
+static ScalarFunction InferaScalarFunction(const std::string &name, vector<LogicalType> arguments, LogicalType return_type,
+                                           scalar_function_t function, bool volatile_state = false, bool fallible = true) {
+  auto scalar_function = ScalarFunction(name, std::move(arguments), std::move(return_type), function);
+  if (volatile_state) {
+    scalar_function.SetVolatile();
+  }
+  if (fallible) {
+    scalar_function.SetFallible();
+  }
+  return scalar_function;
+}
+
+/**
  * @brief Implements the `infera_set_autoload_dir(path)` SQL function.
  *
  * This function takes a directory path, passes it to the Rust core to load all
@@ -300,11 +319,14 @@ static void PredictFromBlob(DataChunk &args, ExpressionState &state, Vector &res
  * @param result The result vector to populate.
  */
 static void GetLoadedModels(DataChunk &args, ExpressionState &state, Vector &result) {
-  char *models_json = infera::infera_get_loaded_models();
+  char *models_json_c = infera::infera_get_loaded_models();
+  // Guard against the null_mut() path in the Rust fallback (should not occur in
+  // practice, but infera_get_loaded_models documents that it can return NULL).
+  std::string models_json = models_json_c ? std::string(models_json_c) : std::string("[]");
+  infera::infera_free(models_json_c);
   result.SetVectorType(VectorType::CONSTANT_VECTOR);
   ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, models_json);
   ConstantVector::SetNull(result, false);
-  infera::infera_free(models_json);
 }
 
 static void IsModelLoaded(DataChunk &args, ExpressionState &state, Vector &result) {
@@ -504,30 +526,51 @@ static void GetCacheInfo(DataChunk &args, ExpressionState &state, Vector &result
  * @param loader The extension loader provided by DuckDB.
  */
 static void LoadInternal(ExtensionLoader &loader) {
-  loader.RegisterFunction(ScalarFunction("infera_load_model", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN, LoadModel));
-  loader.RegisterFunction(ScalarFunction("infera_unload_model", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, UnloadModel));
+  loader.RegisterFunction(InferaScalarFunction("infera_load_model", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN, LoadModel, true));
+  loader.RegisterFunction(InferaScalarFunction("infera_unload_model", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, UnloadModel, true));
 
   const idx_t MAX_FEATURES = 127;
   for (idx_t feature_count = 1; feature_count <= MAX_FEATURES; feature_count++) {
-    vector<LogicalType> arg_types;
-    arg_types.reserve(feature_count + 1);
-    arg_types.push_back(LogicalType::VARCHAR);
+    vector<LogicalType> float_arg_types;
+    float_arg_types.reserve(feature_count + 1);
+    float_arg_types.push_back(LogicalType::VARCHAR);
     for (idx_t i = 0; i < feature_count; i++) {
-      arg_types.push_back(LogicalType::FLOAT);
+      float_arg_types.push_back(LogicalType::FLOAT);
     }
-    loader.RegisterFunction(ScalarFunction("infera_predict", arg_types, LogicalType::FLOAT, Predict));
-    loader.RegisterFunction(ScalarFunction("infera_predict_multi", arg_types, LogicalType::VARCHAR, PredictMulti));
-    loader.RegisterFunction(ScalarFunction("infera_predict_multi_list", arg_types, LogicalType::LIST(LogicalType::FLOAT), PredictMultiList));
+    // volatile_state=true: inference reads shared mutable model state; the
+    // planner must not CSE or constant-fold these calls across row groups.
+    loader.RegisterFunction(InferaScalarFunction("infera_predict", float_arg_types, LogicalType::FLOAT, Predict, true));
+    loader.RegisterFunction(InferaScalarFunction("infera_predict_multi", float_arg_types, LogicalType::VARCHAR, PredictMulti, true));
+    loader.RegisterFunction(InferaScalarFunction("infera_predict_multi_list", float_arg_types, LogicalType::LIST(LogicalType::FLOAT), PredictMultiList, true));
+
+    // DOUBLE overloads: DuckDB main changed how it handles DECIMAL→FLOAT implicit
+    // casts at bind time, causing an internal error for DECIMAL literal inputs.
+    // Registering DOUBLE overloads gives DuckDB a DECIMAL→DOUBLE path that works
+    // across all supported versions. ExtractFeatures already handles DOUBLE values.
+    vector<LogicalType> double_arg_types;
+    double_arg_types.reserve(feature_count + 1);
+    double_arg_types.push_back(LogicalType::VARCHAR);
+    for (idx_t i = 0; i < feature_count; i++) {
+      double_arg_types.push_back(LogicalType::DOUBLE);
+    }
+    loader.RegisterFunction(InferaScalarFunction("infera_predict", double_arg_types, LogicalType::FLOAT, Predict, true));
+    loader.RegisterFunction(InferaScalarFunction("infera_predict_multi", double_arg_types, LogicalType::VARCHAR, PredictMulti, true));
+    loader.RegisterFunction(InferaScalarFunction("infera_predict_multi_list", double_arg_types, LogicalType::LIST(LogicalType::FLOAT), PredictMultiList, true));
   }
 
-  loader.RegisterFunction(ScalarFunction("infera_predict_from_blob", {LogicalType::VARCHAR, LogicalType::BLOB}, LogicalType::LIST(LogicalType::FLOAT), PredictFromBlob));
-  loader.RegisterFunction(ScalarFunction("infera_get_loaded_models", {}, LogicalType::VARCHAR, GetLoadedModels));
-  loader.RegisterFunction(ScalarFunction("infera_get_model_info", {LogicalType::VARCHAR}, LogicalType::VARCHAR, GetModelInfo));
-  loader.RegisterFunction(ScalarFunction("infera_get_version", {}, LogicalType::VARCHAR, GetVersion));
-  loader.RegisterFunction(ScalarFunction("infera_set_autoload_dir", {LogicalType::VARCHAR}, LogicalType::VARCHAR, SetAutoloadDir));
-  loader.RegisterFunction(ScalarFunction("infera_is_model_loaded", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, IsModelLoaded));
-  loader.RegisterFunction(ScalarFunction("infera_clear_cache", {}, LogicalType::BOOLEAN, ClearCache));
-  loader.RegisterFunction(ScalarFunction("infera_get_cache_info", {}, LogicalType::VARCHAR, GetCacheInfo));
+  // volatile_state=true: reads mutable model state; same reasoning as predict.
+  loader.RegisterFunction(InferaScalarFunction("infera_predict_from_blob", {LogicalType::VARCHAR, LogicalType::BLOB}, LogicalType::LIST(LogicalType::FLOAT), PredictFromBlob, true));
+  loader.RegisterFunction(InferaScalarFunction("infera_get_loaded_models", {}, LogicalType::VARCHAR, GetLoadedModels, true, false));
+  // volatile_state=true: reads the live model registry; a model reload between
+  // two calls in the same query must produce fresh metadata each time.
+  loader.RegisterFunction(InferaScalarFunction("infera_get_model_info", {LogicalType::VARCHAR}, LogicalType::VARCHAR, GetModelInfo, true));
+  loader.RegisterFunction(InferaScalarFunction("infera_get_version", {}, LogicalType::VARCHAR, GetVersion, false, false));
+  loader.RegisterFunction(InferaScalarFunction("infera_set_autoload_dir", {LogicalType::VARCHAR}, LogicalType::VARCHAR, SetAutoloadDir, true));
+  loader.RegisterFunction(InferaScalarFunction("infera_is_model_loaded", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, IsModelLoaded, true, false));
+  loader.RegisterFunction(InferaScalarFunction("infera_clear_cache", {}, LogicalType::BOOLEAN, ClearCache, true));
+  // volatile_state=true: cache state changes whenever infera_clear_cache or
+  // a remote model download updates the cache directory.
+  loader.RegisterFunction(InferaScalarFunction("infera_get_cache_info", {}, LogicalType::VARCHAR, GetCacheInfo, true, false));
 }
 
 void InferaExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }

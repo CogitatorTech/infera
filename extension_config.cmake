@@ -69,7 +69,14 @@ if (EXISTS ${INFERA_RUST_LIB})
     # Create an imported target for the Rust library
     add_library(infera_rust STATIC IMPORTED GLOBAL)
     if(UNIX)
-        set(_INFERA_RUST_LINK_LIBS "pthread;dl;m")
+        if(APPLE)
+            # reqwest 0.13 uses rustls-platform-verifier on Apple platforms, which
+            # calls into the macOS Security and CoreFoundation frameworks. Link them
+            # explicitly so the static Rust archive resolves at extension link time.
+            set(_INFERA_RUST_LINK_LIBS "pthread;dl;m;-framework Security;-framework CoreFoundation;-framework SystemConfiguration")
+        else()
+            set(_INFERA_RUST_LINK_LIBS "pthread;dl;m")
+        endif()
     else()
         set(_INFERA_RUST_LINK_LIBS "")
     endif()
@@ -80,7 +87,11 @@ if (EXISTS ${INFERA_RUST_LIB})
 
     # Add the Rust library to global link libraries so it gets linked to everything
     if(UNIX)
-        link_libraries(${INFERA_RUST_LIB} pthread dl m)
+        if(APPLE)
+            link_libraries(${INFERA_RUST_LIB} pthread dl m "-framework Security" "-framework CoreFoundation" "-framework SystemConfiguration")
+        else()
+            link_libraries(${INFERA_RUST_LIB} pthread dl m)
+        endif()
     else()
         link_libraries(${INFERA_RUST_LIB})
         if(WIN32)
@@ -107,6 +118,11 @@ if (EXISTS ${INFERA_RUST_LIB})
         add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-lpthread>)
         add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-ldl>)
         add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-lm>)
+        # Apple framework flags are NOT added via add_link_options: CMake splits
+        # "-framework Security" at the space inside generator expressions, producing
+        # the literal token '$<0:-framework' instead of an empty string. The frameworks
+        # are already propagated to all targets by link_libraries() and
+        # INTERFACE_LINK_LIBRARIES above, so no add_link_options entry is needed.
     else()
         add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:${INFERA_RUST_LIB}>)
     endif()
