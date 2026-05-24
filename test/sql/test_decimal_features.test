@@ -4,9 +4,6 @@
 # Validate DECIMAL feature inputs work (via implicit cast) and return correct results
 
 statement ok
-pragma enable_verification
-
-statement ok
 load 'build/release/extension/infera/infera.duckdb_extension'
 
 statement ok

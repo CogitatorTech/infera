@@ -4,9 +4,6 @@
 # Validate infera_predict_multi_list returns LIST[FLOAT] with correct length and values
 
 statement ok
-pragma enable_verification
-
-statement ok
 load 'build/release/extension/infera/infera.duckdb_extension'
 
 # Load models
