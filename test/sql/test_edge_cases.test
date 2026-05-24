@@ -4,6 +4,9 @@
 # additional edge cases for the infera extension
 
 statement ok
+pragma enable_verification
+
+statement ok
 load 'build/release/extension/infera/infera.duckdb_extension'
 
 # load a baseline model

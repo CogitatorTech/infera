@@ -3,6 +3,9 @@
 
 # tests advanced features like remote model loading and blob inputs.
 
+statement ok
+pragma enable_verification
+
 # load the infera extension from the local build artifact
 statement ok
 load 'build/release/extension/infera/infera.duckdb_extension'

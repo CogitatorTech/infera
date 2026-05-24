@@ -1,0 +1,152 @@
+# name: test/sql/test_volatile_and_null_safety.test
+# group: [infera]
+
+# Regression tests
+
+statement ok
+pragma enable_verification
+
+statement ok
+load 'build/release/extension/infera/infera.duckdb_extension'
+
+# ── Finding 1: predict volatile ────────────────────────────────────────────────
+# Load the linear model (y = 2*x1 - 1*x2 + 0.5*x3 + 0.25).
+# Expected output for (1.0, 2.0, 3.0) is 1.75.
+
+statement ok
+select infera_load_model('linear', 'test/models/linear.onnx')
+
+# Baseline prediction.
+query I
+select abs(infera_predict('linear', 1.0, 2.0, 3.0) - 1.75) < 1e-5
+----
+true
+
+# Reload the same model. If the planner had folded the predict call to a
+# constant the reload would have no effect on subsequent results. The test
+# below asserts that predictions still work correctly after a reload, which
+# would fail if folding had cached an engine-level error.
+statement ok
+select infera_unload_model('linear')
+
+statement ok
+select infera_load_model('linear', 'test/models/linear.onnx')
+
+query I
+select abs(infera_predict('linear', 1.0, 2.0, 3.0) - 1.75) < 1e-5
+----
+true
+
+# Repeat via infera_predict_multi (JSON string output).
+query I
+select instr(infera_predict_multi('linear', 1.0, 2.0, 3.0), '1.75') > 0
+----
+true
+
+# Repeat via infera_predict_multi_list (LIST[FLOAT] output).
+query I
+select len(infera_predict_multi_list('linear', 1.0, 2.0, 3.0)) > 0
+----
+true
+
+# Repeat via infera_predict_from_blob.
+# The linear model expects 1×3 floats (12 bytes, little-endian).
+# encode 1.0, 2.0, 3.0 as IEEE-754 little-endian: each is 4 bytes.
+# We use a zero blob to test that the function executes (not the specific value).
+query I
+select len(infera_predict_from_blob('linear', cast(repeat(chr(0), 12) as blob))) >= 0
+----
+true
+
+# ── Finding 2: GetLoadedModels null safety ──────────────────────────────────────
+# infera_get_loaded_models must return a valid JSON string under normal
+# conditions; the null guard is a defensive path for an extreme OOM case in
+# Rust. We verify normal behavior returns a well-formed JSON array, not NULL.
+
+query I
+select infera_get_loaded_models() is not null
+----
+true
+
+query I
+select infera_get_loaded_models() like '[%'
+----
+true
+
+query I
+select instr(infera_get_loaded_models(), 'linear') > 0
+----
+true
+
+# ── Finding 3: get_model_info volatile ─────────────────────────────────────────
+# infera_get_model_info must return fresh data after a reload. If it were
+# non-volatile, a constant-folded plan might return stale metadata for a second
+# call with the same literal model name.
+
+query I
+select infera_get_model_info('linear') is not null
+----
+true
+
+query I
+select infera_get_model_info('linear') like '%input_shape%'
+----
+true
+
+# Unload, then reload. get_model_info should still work correctly afterward,
+# confirming it queries live state rather than a cached result.
+statement ok
+select infera_unload_model('linear')
+
+statement error
+select infera_get_model_info('linear')
+----
+Failed to get info for model 'linear'
+
+statement ok
+select infera_load_model('linear', 'test/models/linear.onnx')
+
+query I
+select infera_get_model_info('linear') like '%input_shape%'
+----
+true
+
+# ── Finding 4: get_cache_info volatile ─────────────────────────────────────────
+# infera_get_cache_info must return non-null results both before and after a
+# cache clear. If it were non-volatile and DuckDB folded two calls in the same
+# query to one, a clear followed by a stats call could return stale pre-clear
+# data. The test below verifies the function returns valid JSON in both states.
+
+query I
+select infera_get_cache_info() is not null
+----
+true
+
+query I
+select infera_get_cache_info() like '%cache_dir%'
+----
+true
+
+query I
+select infera_get_cache_info() like '%total_size_bytes%'
+----
+true
+
+# After a cache clear, get_cache_info must still return valid data.
+statement ok
+select infera_clear_cache()
+
+query I
+select infera_get_cache_info() is not null
+----
+true
+
+query I
+select infera_get_cache_info() like '%cache_dir%'
+----
+true
+
+# ── Cleanup ─────────────────────────────────────────────────────────────────────
+
+statement ok
+select infera_unload_model('linear')

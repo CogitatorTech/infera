@@ -4,6 +4,9 @@
 # tests multi-output model behavior for infera_predict_multi vs infera_predict
 
 statement ok
+pragma enable_verification
+
+statement ok
 load 'build/release/extension/infera/infera.duckdb_extension'
 
 # load multi-output model (input shape [1,4] -> output shape [1,4])

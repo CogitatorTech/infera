@@ -3,6 +3,9 @@
 
 # Tests for cache management functionality including LRU eviction
 
+statement ok
+pragma enable_verification
+
 # load the infera extension
 statement ok
 load 'build/release/extension/infera/infera.duckdb_extension'

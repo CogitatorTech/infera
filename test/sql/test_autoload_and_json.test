@@ -4,6 +4,9 @@
 # tests autoload error handling and json structure validation
 
 statement ok
+pragma enable_verification
+
+statement ok
 load 'build/release/extension/infera/infera.duckdb_extension'
 
 # autoload error (directory does not exist)
