@@ -482,9 +482,11 @@ mod tests {
         let mut server = Server::new();
         let body = b"onnxdata".to_vec();
 
+        // Use a path unique to this test so the URL hash never collides with other
+        // tests that mockito may schedule on the same port (OS port reuse).
         // 1. Initial request (no ETag matched) returns 200 with ETag "tag1"
         let m1 = server
-            .mock("GET", "/ok_model.onnx")
+            .mock("GET", "/ok_model_etag_304.onnx")
             .match_header("if-none-match", mockito::Matcher::Missing)
             .with_status(200)
             .with_header("ETag", "tag1")
@@ -493,12 +495,12 @@ mod tests {
 
         // 2. Subsequent request (with If-None-Match: tag1) returns 304 Not Modified
         let m2 = server
-            .mock("GET", "/ok_model.onnx")
+            .mock("GET", "/ok_model_etag_304.onnx")
             .match_header("if-none-match", "tag1")
             .with_status(304)
             .create();
 
-        let url = format!("{}/ok_model.onnx", server.url());
+        let url = format!("{}/ok_model_etag_304.onnx", server.url());
 
         // First download creates the file and the .etag metadata
         let path1 = handle_remote_model(&url).expect("initial download should succeed");
@@ -530,9 +532,11 @@ mod tests {
         let body1 = b"onnxdata1".to_vec();
         let body2 = b"onnxdata2".to_vec();
 
+        // Use a path unique to this test so the URL hash never collides with other
+        // tests that mockito may schedule on the same port (OS port reuse).
         // 1. Initial request returns 200 with ETag "tag1" and body1
         let m1 = server
-            .mock("GET", "/ok_model.onnx")
+            .mock("GET", "/ok_model_etag_200.onnx")
             .match_header("if-none-match", mockito::Matcher::Missing)
             .with_status(200)
             .with_header("ETag", "tag1")
@@ -541,14 +545,14 @@ mod tests {
 
         // 2. Subsequent request (with If-None-Match: tag1) returns 200 with ETag "tag2" and body2
         let m2 = server
-            .mock("GET", "/ok_model.onnx")
+            .mock("GET", "/ok_model_etag_200.onnx")
             .match_header("if-none-match", "tag1")
             .with_status(200)
             .with_header("ETag", "tag2")
             .with_body(body2.clone())
             .create();
 
-        let url = format!("{}/ok_model.onnx", server.url());
+        let url = format!("{}/ok_model_etag_200.onnx", server.url());
 
         // First download gets body1
         let path1 = handle_remote_model(&url).expect("initial download should succeed");
