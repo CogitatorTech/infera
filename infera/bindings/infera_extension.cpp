@@ -531,17 +531,31 @@ static void LoadInternal(ExtensionLoader &loader) {
 
   const idx_t MAX_FEATURES = 127;
   for (idx_t feature_count = 1; feature_count <= MAX_FEATURES; feature_count++) {
-    vector<LogicalType> arg_types;
-    arg_types.reserve(feature_count + 1);
-    arg_types.push_back(LogicalType::VARCHAR);
+    vector<LogicalType> float_arg_types;
+    float_arg_types.reserve(feature_count + 1);
+    float_arg_types.push_back(LogicalType::VARCHAR);
     for (idx_t i = 0; i < feature_count; i++) {
-      arg_types.push_back(LogicalType::FLOAT);
+      float_arg_types.push_back(LogicalType::FLOAT);
     }
     // volatile_state=true: inference reads shared mutable model state; the
     // planner must not CSE or constant-fold these calls across row groups.
-    loader.RegisterFunction(InferaScalarFunction("infera_predict", arg_types, LogicalType::FLOAT, Predict, true));
-    loader.RegisterFunction(InferaScalarFunction("infera_predict_multi", arg_types, LogicalType::VARCHAR, PredictMulti, true));
-    loader.RegisterFunction(InferaScalarFunction("infera_predict_multi_list", arg_types, LogicalType::LIST(LogicalType::FLOAT), PredictMultiList, true));
+    loader.RegisterFunction(InferaScalarFunction("infera_predict", float_arg_types, LogicalType::FLOAT, Predict, true));
+    loader.RegisterFunction(InferaScalarFunction("infera_predict_multi", float_arg_types, LogicalType::VARCHAR, PredictMulti, true));
+    loader.RegisterFunction(InferaScalarFunction("infera_predict_multi_list", float_arg_types, LogicalType::LIST(LogicalType::FLOAT), PredictMultiList, true));
+
+    // DOUBLE overloads: DuckDB main changed how it handles DECIMAL→FLOAT implicit
+    // casts at bind time, causing an internal error for DECIMAL literal inputs.
+    // Registering DOUBLE overloads gives DuckDB a DECIMAL→DOUBLE path that works
+    // across all supported versions. ExtractFeatures already handles DOUBLE values.
+    vector<LogicalType> double_arg_types;
+    double_arg_types.reserve(feature_count + 1);
+    double_arg_types.push_back(LogicalType::VARCHAR);
+    for (idx_t i = 0; i < feature_count; i++) {
+      double_arg_types.push_back(LogicalType::DOUBLE);
+    }
+    loader.RegisterFunction(InferaScalarFunction("infera_predict", double_arg_types, LogicalType::FLOAT, Predict, true));
+    loader.RegisterFunction(InferaScalarFunction("infera_predict_multi", double_arg_types, LogicalType::VARCHAR, PredictMulti, true));
+    loader.RegisterFunction(InferaScalarFunction("infera_predict_multi_list", double_arg_types, LogicalType::LIST(LogicalType::FLOAT), PredictMultiList, true));
   }
 
   // volatile_state=true: reads mutable model state; same reasoning as predict.
