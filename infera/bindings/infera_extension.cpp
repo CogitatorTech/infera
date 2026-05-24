@@ -45,7 +45,7 @@ static std::string GetInferaError() {
  * pure deterministic functions.
  */
 static ScalarFunction InferaScalarFunction(const std::string &name, vector<LogicalType> arguments, LogicalType return_type,
-                                           scalar_function_t function, bool volatile_state = true, bool fallible = true) {
+                                           scalar_function_t function, bool volatile_state = false, bool fallible = true) {
   auto scalar_function = ScalarFunction(name, std::move(arguments), std::move(return_type), function);
   if (volatile_state) {
     scalar_function.SetVolatile();
@@ -523,8 +523,8 @@ static void GetCacheInfo(DataChunk &args, ExpressionState &state, Vector &result
  * @param loader The extension loader provided by DuckDB.
  */
 static void LoadInternal(ExtensionLoader &loader) {
-  loader.RegisterFunction(InferaScalarFunction("infera_load_model", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN, LoadModel));
-  loader.RegisterFunction(InferaScalarFunction("infera_unload_model", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, UnloadModel));
+  loader.RegisterFunction(InferaScalarFunction("infera_load_model", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN, LoadModel, true));
+  loader.RegisterFunction(InferaScalarFunction("infera_unload_model", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, UnloadModel, true));
 
   const idx_t MAX_FEATURES = 127;
   for (idx_t feature_count = 1; feature_count <= MAX_FEATURES; feature_count++) {
@@ -543,9 +543,9 @@ static void LoadInternal(ExtensionLoader &loader) {
   loader.RegisterFunction(InferaScalarFunction("infera_get_loaded_models", {}, LogicalType::VARCHAR, GetLoadedModels, true, false));
   loader.RegisterFunction(InferaScalarFunction("infera_get_model_info", {LogicalType::VARCHAR}, LogicalType::VARCHAR, GetModelInfo));
   loader.RegisterFunction(InferaScalarFunction("infera_get_version", {}, LogicalType::VARCHAR, GetVersion, false, false));
-  loader.RegisterFunction(InferaScalarFunction("infera_set_autoload_dir", {LogicalType::VARCHAR}, LogicalType::VARCHAR, SetAutoloadDir));
+  loader.RegisterFunction(InferaScalarFunction("infera_set_autoload_dir", {LogicalType::VARCHAR}, LogicalType::VARCHAR, SetAutoloadDir, true));
   loader.RegisterFunction(InferaScalarFunction("infera_is_model_loaded", {LogicalType::VARCHAR}, LogicalType::BOOLEAN, IsModelLoaded, true, false));
-  loader.RegisterFunction(InferaScalarFunction("infera_clear_cache", {}, LogicalType::BOOLEAN, ClearCache));
+  loader.RegisterFunction(InferaScalarFunction("infera_clear_cache", {}, LogicalType::BOOLEAN, ClearCache, true));
   loader.RegisterFunction(InferaScalarFunction("infera_get_cache_info", {}, LogicalType::VARCHAR, GetCacheInfo));
 }
 
