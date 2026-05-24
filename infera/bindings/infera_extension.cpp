@@ -37,6 +37,13 @@ static std::string GetInferaError() {
   return err ? std::string(err) : std::string("unknown error");
 }
 
+/**
+ * @brief Creates a DuckDB scalar function with Infera execution metadata.
+ *
+ * Infera functions generally read or mutate model engine state, and many can
+ * raise runtime errors. The metadata prevents DuckDB from optimizing them as
+ * pure deterministic functions.
+ */
 static ScalarFunction InferaScalarFunction(const std::string &name, vector<LogicalType> arguments, LogicalType return_type,
                                            scalar_function_t function, bool volatile_state = true, bool fallible = true) {
   auto scalar_function = ScalarFunction(name, std::move(arguments), std::move(return_type), function);
