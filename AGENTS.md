@@ -56,7 +56,7 @@ Priorities, in order:
 - `docs/examples/`: SQL examples that should remain runnable against a local build.
 - `.github/workflows/tests.yml`: Rust tests and SQL tests in CI.
 - `.github/workflows/lints.yml`: Rust formatting and clippy checks in CI.
-- `.github/workflows/dist_pipeline.yml`: cross-platform extension packaging against DuckDB `main` and `v1.5.2`.
+- `.github/workflows/dist_pipeline.yml`: cross-platform extension packaging against DuckDB `main` and `v1.5.4`.
 
 ## Architecture Notes
 
