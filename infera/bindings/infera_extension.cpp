@@ -32,16 +32,16 @@ static T *GetFlatVectorDataWritable(Vector &vector) {
 template <int N> struct PriorityTag : PriorityTag<N - 1> {};
 template <> struct PriorityTag<0> {};
 template <typename T = Vector>
-static auto VerifyVectorCompat(const T &vector, idx_t count, PriorityTag<1>)
+static auto VerifyVectorCompat(T &vector, idx_t count, PriorityTag<1>)
     -> decltype(vector.Verify(), void()) {
   vector.Verify();
 }
 template <typename T = Vector>
-static auto VerifyVectorCompat(const T &vector, idx_t count, PriorityTag<0>)
+static auto VerifyVectorCompat(T &vector, idx_t count, PriorityTag<0>)
     -> decltype(vector.Verify(count), void()) {
   vector.Verify(count);
 }
-static void VerifyVectorCompat(const Vector &vector, idx_t count) {
+static void VerifyVectorCompat(Vector &vector, idx_t count) {
   VerifyVectorCompat(vector, count, PriorityTag<1>{});
 }
 
