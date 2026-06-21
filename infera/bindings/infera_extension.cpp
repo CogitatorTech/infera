@@ -17,6 +17,8 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "rust.h"
@@ -26,6 +28,21 @@ namespace duckdb {
 template <typename T>
 static T *GetFlatVectorDataWritable(Vector &vector) {
   return const_cast<T *>(FlatVector::GetData<T>(vector));
+}
+template <int N> struct PriorityTag : PriorityTag<N - 1> {};
+template <> struct PriorityTag<0> {};
+template <typename T = Vector>
+static auto VerifyVectorCompat(const T &vector, idx_t count, PriorityTag<1>)
+    -> decltype(vector.Verify(), void()) {
+  vector.Verify();
+}
+template <typename T = Vector>
+static auto VerifyVectorCompat(const T &vector, idx_t count, PriorityTag<0>)
+    -> decltype(vector.Verify(count), void()) {
+  vector.Verify(count);
+}
+static void VerifyVectorCompat(const Vector &vector, idx_t count) {
+  VerifyVectorCompat(vector, count, PriorityTag<1>{});
 }
 
 /**
@@ -46,7 +63,8 @@ static std::string GetInferaError() {
  */
 static ScalarFunction InferaScalarFunction(const std::string &name, vector<LogicalType> arguments, LogicalType return_type,
                                            scalar_function_t function, bool volatile_state = false, bool fallible = true) {
-  auto scalar_function = ScalarFunction(name, std::move(arguments), std::move(return_type), function);
+  using ScalarFunctionNameType = std::decay_t<decltype(std::declval<ScalarFunction>().name)>;
+  auto scalar_function = ScalarFunction(ScalarFunctionNameType(name), std::move(arguments), std::move(return_type), function);
   if (volatile_state) {
     scalar_function.SetVolatile();
   }
@@ -306,7 +324,7 @@ static void PredictFromBlob(DataChunk &args, ExpressionState &state, Vector &res
     result.SetValue(i, Value::LIST(std::move(elems)));
     infera::infera_free_result(res);
   }
-  result.Verify(args.size());
+  VerifyVectorCompat(result, args.size());
 }
 
 /**
@@ -440,7 +458,7 @@ static void PredictMultiList(DataChunk &args, ExpressionState &state, Vector &re
     result.SetValue(row_idx, Value::LIST(std::move(elems)));
   }
   infera::infera_free_result(res);
-  result.Verify(args.size());
+  VerifyVectorCompat(result, args.size());
 }
 
 /**
@@ -575,7 +593,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 void InferaExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }
 std::string InferaExtension::Name() { return "infera"; }
-std::string InferaExtension::Version() const { return "v0.3.0"; }
+std::string InferaExtension::Version() const { return "v0.4.0"; }
 
 } // namespace duckdb
 
