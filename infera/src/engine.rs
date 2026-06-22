@@ -206,7 +206,7 @@ pub(crate) fn run_inference_blob_impl(
     let model = models
         .get(model_name)
         .ok_or_else(|| InferaError::ModelNotFound(model_name.to_string()))?;
-    if !blob_len.is_multiple_of(mem::size_of::<f32>()) {
+    if blob_len % mem::size_of::<f32>() != 0 {
         return Err(InferaError::InvalidBlobSize);
     }
     let blob_bytes = unsafe { std::slice::from_raw_parts(blob_data, blob_len) };
@@ -224,7 +224,7 @@ pub(crate) fn run_inference_blob_impl(
         .filter(|&&d| d > 0)
         .map(|&d| d as usize)
         .product();
-    if !float_vec.len().is_multiple_of(expected_elements) {
+    if expected_elements == 0 || float_vec.len() % expected_elements != 0 {
         return Err(InferaError::BlobShapeMismatch {
             expected: expected_elements,
             actual: float_vec.len(),
