@@ -224,7 +224,7 @@ pub(crate) fn run_inference_blob_impl(
         .filter(|&&d| d > 0)
         .map(|&d| d as usize)
         .product();
-    if !float_vec.len().is_multiple_of(expected_elements) {
+    if expected_elements == 0 || !float_vec.len().is_multiple_of(expected_elements) {
         return Err(InferaError::BlobShapeMismatch {
             expected: expected_elements,
             actual: float_vec.len(),

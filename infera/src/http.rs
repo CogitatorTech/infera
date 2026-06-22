@@ -34,7 +34,7 @@ impl<'a> TempFileGuard<'a> {
     }
 }
 
-impl<'a> Drop for TempFileGuard<'a> {
+impl Drop for TempFileGuard<'_> {
     fn drop(&mut self) {
         if !self.committed {
             let _ = fs::remove_file(self.path);
