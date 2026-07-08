@@ -318,6 +318,21 @@ fn download_file(
     ))
 }
 
+/// Installs the process-wide rustls crypto provider used by reqwest.
+///
+/// reqwest is built with the `rustls-no-provider` feature, so a crypto provider must be
+/// installed before the first client is constructed. The ring provider is used because
+/// aws-lc-sys fails to build its ARMv8 assembly under the MSVC toolchain on windows_arm64.
+#[cfg(not(target_family = "wasm"))]
+fn ensure_crypto_provider() {
+    use std::sync::Once;
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        // Ignore the result: an error only means a provider is already installed.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
+
 /// Download a file from a URL to a local path with timeout, optionally verifying via ETag.
 #[cfg(not(target_family = "wasm"))]
 fn download_file(
@@ -326,6 +341,8 @@ fn download_file(
     timeout_secs: u64,
     etag: Option<&str>,
 ) -> Result<DownloadResult, InferaError> {
+    ensure_crypto_provider();
+
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(timeout_secs))
         .build()

@@ -28,8 +28,14 @@ time = { version = "=0.3.44", default-features = false }
 # reqwest pulls in tokio and mio, which do not support WebAssembly. Remote model
 # downloading is therefore compiled only for non-wasm targets; the wasm build loads
 # models from local paths provided through DuckDB instead.
+#
+# reqwest uses the rustls-no-provider feature so the crypto provider is chosen here
+# rather than defaulting to aws-lc-rs. The ring provider is installed at runtime in
+# http.rs because aws-lc-sys fails to build its ARMv8 assembly under the MSVC toolchain
+# on windows_arm64, while ring compiles cleanly on that target.
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-reqwest = { version = "0.13.3", features = ["blocking", "rustls"], default-features = false }
+reqwest = { version = "0.13.3", features = ["blocking", "rustls-no-provider"], default-features = false }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 
 [dev-dependencies]
 tempfile = "3.10"
