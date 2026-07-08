@@ -4,7 +4,10 @@ use crate::config::{LogLevel, CONFIG};
 use crate::error::InferaError;
 use crate::log;
 use sha2::{Digest, Sha256};
-use std::fs::{self, File};
+use std::fs;
+#[cfg(not(target_family = "wasm"))]
+use std::fs::File;
+#[cfg(not(target_family = "wasm"))]
 use std::io;
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -141,6 +144,9 @@ pub(crate) fn clear_cache() -> Result<(), InferaError> {
 }
 
 /// The result of a remote model cache validation or download check.
+// On wasm the download path is stubbed out, so the variants are matched but never
+// constructed. Allow dead code there to keep the shared cache logic unchanged.
+#[cfg_attr(target_family = "wasm", allow(dead_code))]
 #[derive(Debug, PartialEq, Eq)]
 enum DownloadResult {
     /// The remote model has not been modified on the server.
@@ -294,6 +300,26 @@ pub(crate) fn handle_remote_model(url: &str) -> Result<PathBuf, InferaError> {
 }
 
 /// Download a file from a URL to a local path with timeout, optionally verifying via ETag.
+///
+/// The WebAssembly target has no reqwest, tokio, or socket support, so remote model
+/// downloading is unavailable there. The wasm stub below reports a clear error and the
+/// wasm build is expected to load models from local paths provided through DuckDB.
+#[cfg(target_family = "wasm")]
+fn download_file(
+    _url: &str,
+    _dest: &Path,
+    _timeout_secs: u64,
+    _etag: Option<&str>,
+) -> Result<DownloadResult, InferaError> {
+    Err(InferaError::HttpRequestError(
+        "remote model downloading over HTTP is not supported in the WebAssembly build; \
+         load the model from a local path instead"
+            .to_string(),
+    ))
+}
+
+/// Download a file from a URL to a local path with timeout, optionally verifying via ETag.
+#[cfg(not(target_family = "wasm"))]
 fn download_file(
     url: &str,
     dest: &Path,

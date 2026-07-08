@@ -33,8 +33,10 @@ jobs:
       enable_rust: true
       # windows_arm64 is opt-in in the DuckDB distribution matrix; build it natively on the arm64 runner
       opt_in_archs: "windows_arm64"
-      # Wasm is excluded because the reqwest/tokio/mio HTTP model-download stack has no wasm support
-      exclude_archs: "windows_amd64_mingw;osx_amd64;wasm_mvp;wasm_eh;wasm_threads"
+      # wasm_threads stays excluded until the threaded WASM build (with rayon and pthreads) is validated.
+      # wasm_mvp and wasm_eh build with the reqwest HTTP model-download path feature-gated off; the
+      # WASM build loads models from local paths instead.
+      exclude_archs: "windows_amd64_mingw;osx_amd64;wasm_threads"
 
   duckdb-stable-build:
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5.4
@@ -45,8 +47,10 @@ jobs:
       enable_rust: true
       # windows_arm64 is opt-in in the DuckDB distribution matrix; build it natively on the arm64 runner
       opt_in_archs: "windows_arm64"
-      # Wasm is excluded because the reqwest/tokio/mio HTTP model-download stack has no wasm support
-      exclude_archs: "windows_amd64_mingw;osx_amd64;wasm_mvp;wasm_eh;wasm_threads"
+      # wasm_threads stays excluded until the threaded WASM build (with rayon and pthreads) is validated.
+      # wasm_mvp and wasm_eh build with the reqwest HTTP model-download path feature-gated off; the
+      # WASM build loads models from local paths instead.
+      exclude_archs: "windows_amd64_mingw;osx_amd64;wasm_threads"
 
   create-release-draft:
     name: Create draft release with built binaries
