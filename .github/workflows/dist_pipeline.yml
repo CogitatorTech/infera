@@ -46,12 +46,6 @@ jobs:
       ci_tools_version: v1.5.4
       extension_name: infera
       enable_rust: true
-      # windows_arm64 is intentionally not opted in. tract-linalg ships ARM64 SIMD assembly
-      # kernels with no MSVC assembler path (confirmed through tract-linalg 0.23.4), so the Rust
-      # core cannot link on aarch64-pc-windows-msvc. Revisit if tract adds that assembler support.
-      # wasm_threads stays excluded until the threaded WASM build (with rayon and pthreads) is validated.
-      # wasm_mvp and wasm_eh build with the reqwest HTTP model-download path feature-gated off; the
-      # WASM build loads models from local paths instead.
       exclude_archs: "windows_amd64_mingw;osx_amd64;wasm_threads"
 
   create-release-draft:
