@@ -31,6 +31,9 @@ jobs:
       ci_tools_version: main
       extension_name: infera
       enable_rust: true
+      # windows_arm64 is opt-in in the DuckDB distribution matrix; build it natively on the arm64 runner
+      opt_in_archs: "windows_arm64"
+      # Wasm is excluded because the reqwest/tokio/mio HTTP model-download stack has no wasm support
       exclude_archs: "windows_amd64_mingw;osx_amd64;wasm_mvp;wasm_eh;wasm_threads"
 
   duckdb-stable-build:
@@ -40,6 +43,9 @@ jobs:
       ci_tools_version: v1.5.4
       extension_name: infera
       enable_rust: true
+      # windows_arm64 is opt-in in the DuckDB distribution matrix; build it natively on the arm64 runner
+      opt_in_archs: "windows_arm64"
+      # Wasm is excluded because the reqwest/tokio/mio HTTP model-download stack has no wasm support
       exclude_archs: "windows_amd64_mingw;osx_amd64;wasm_mvp;wasm_eh;wasm_threads"
 
   create-release-draft:
