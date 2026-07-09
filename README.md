@@ -89,9 +89,6 @@ make release
 > After building from source, the Infera binary will be `build/release/extension/infera/infera.duckdb_extension`.
 > You can load it using the `load 'build/release/extension/infera/infera.duckdb_extension';` in the DuckDB shell.
 > Note that the extension binary will only work with the DuckDB version that it was built against.
-> You can download the pre-built binaries from the [releases page](https://github.com/CogitatorTech/infera/releases) for
-> your platform.
-
 
 #### Trying Infera
 

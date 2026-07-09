@@ -68,7 +68,11 @@ if (EXISTS ${INFERA_RUST_LIB})
 
     # Create an imported target for the Rust library
     add_library(infera_rust STATIC IMPORTED GLOBAL)
-    if(UNIX)
+    if(EMSCRIPTEN)
+        # Emscripten provides libm and libdl implicitly, and -lpthread would force the
+        # threaded (wasm_threads) ABI. Link only the Rust static library on WASM.
+        set(_INFERA_RUST_LINK_LIBS "")
+    elseif(UNIX)
         if(APPLE)
             # reqwest 0.13 uses rustls-platform-verifier on Apple platforms, which
             # calls into the macOS Security and CoreFoundation frameworks. Link them
@@ -86,7 +90,9 @@ if (EXISTS ${INFERA_RUST_LIB})
     )
 
     # Add the Rust library to global link libraries so it gets linked to everything
-    if(UNIX)
+    if(EMSCRIPTEN)
+        link_libraries(${INFERA_RUST_LIB})
+    elseif(UNIX)
         if(APPLE)
             link_libraries(${INFERA_RUST_LIB} pthread dl m "-framework Security" "-framework CoreFoundation" "-framework SystemConfiguration")
         else()
@@ -113,7 +119,9 @@ if (EXISTS ${INFERA_RUST_LIB})
         message(STATUS "[infera] Linked Rust library to infera_loadable_extension")
     endif()
 
-    if(UNIX)
+    if(EMSCRIPTEN)
+        add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:${INFERA_RUST_LIB}>)
+    elseif(UNIX)
         add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:${INFERA_RUST_LIB}>)
         add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-lpthread>)
         add_link_options($<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>:-ldl>)
