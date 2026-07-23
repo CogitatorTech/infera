@@ -23,7 +23,7 @@ ndarray = { version = "0.17.1", optional = true }
 sha2 = "0.11.0"
 hex = "0.4"
 filetime = "0.2"
-time = { version = "=0.3.44", default-features = false }
+time = { version = "=0.3.47", default-features = false }
 
 # reqwest pulls in tokio and mio, which do not support WebAssembly. Remote model
 # downloading is therefore compiled only for non-wasm targets; the wasm build loads
