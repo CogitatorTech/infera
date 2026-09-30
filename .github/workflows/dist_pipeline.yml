@@ -30,6 +30,7 @@ jobs:
       duckdb_version: main
       ci_tools_version: main
       extension_name: infera
+      runners: '{"windows_amd64":"windows-2022"}'
       enable_rust: true
       # windows_arm64 is intentionally not opted in. tract-linalg ships ARM64 SIMD assembly
       # kernels with no MSVC assembler path (confirmed through tract-linalg 0.23.4), so the Rust
