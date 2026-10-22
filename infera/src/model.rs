@@ -7,11 +7,10 @@ use std::collections::HashMap;
 #[cfg(feature = "tract")]
 use tract_onnx::prelude::*;
 
-/// Type alias for a Tract `SimplePlan`.
+/// Type alias for a Tract runnable model.
 /// This represents a runnable, optimized ONNX model execution plan.
 #[cfg(feature = "tract")]
-pub(crate) type OnnxModelPlan =
-    SimplePlan<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<dyn TypedOp>>>;
+pub(crate) type OnnxModelPlan = Arc<TypedRunnableModel>;
 
 /// Represents a loaded ONNX model, holding its execution plan and metadata.
 #[cfg(feature = "tract")]

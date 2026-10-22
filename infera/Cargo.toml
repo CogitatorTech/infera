@@ -1,6 +1,6 @@
 [package]
 name = "infera"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 publish = false
 
@@ -15,15 +15,14 @@ tract = ["dep:tract-onnx", "dep:ndarray"]
 
 [dependencies]
 once_cell = "1.19"
-parking_lot = "0.12"
+parking_lot = "0.13.0"
 thiserror = "2.0"
 serde_json = "1.0"
-tract-onnx = { version = "0.22", optional = true }
+tract-onnx = { version = "0.23.9", optional = true }
 ndarray = { version = "0.17.1", optional = true }
 sha2 = "0.11.0"
 hex = "0.4"
 filetime = "0.2"
-time = { version = "=0.3.44", default-features = false }
 
 # reqwest pulls in tokio and mio, which do not support WebAssembly. Remote model
 # downloading is therefore compiled only for non-wasm targets; the wasm build loads
