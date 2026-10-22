@@ -4,7 +4,6 @@ use crate::error::InferaError;
 use crate::ffi_utils::InferaInferenceResult;
 use crate::model::{OnnxModel, MODELS};
 use serde_json::json;
-use std::convert::TryInto;
 use std::mem;
 
 #[cfg(feature = "tract")]
@@ -148,7 +147,7 @@ pub(crate) fn run_inference_impl(
         .next()
         .ok_or_else(|| InferaError::OnnxError("No output tensor".to_string()))?;
     let output_array = output_tensor
-        .to_array_view::<f32>()
+        .to_plain_array_view::<f32>()
         .map_err(|e| InferaError::OnnxError(e.to_string()))?;
     let (output_rows, output_cols) = shape_rows_cols(output_array.shape());
     let output_data: Vec<f32> = output_array.iter().cloned().collect();
@@ -211,12 +210,10 @@ pub(crate) fn run_inference_blob_impl(
     }
     let blob_bytes = unsafe { std::slice::from_raw_parts(blob_data, blob_len) };
     let float_vec: Vec<f32> = blob_bytes
-        .chunks_exact(4)
-        .map(|chunk| {
-            // SAFETY: chunks_exact(4) guarantees exactly 4 bytes, so this conversion cannot fail
-            let array: [u8; 4] = chunk.try_into().unwrap_or_default();
-            f32::from_ne_bytes(array)
-        })
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|&chunk| f32::from_ne_bytes(chunk))
         .collect();
     let expected_elements: usize = model
         .input_shape
@@ -247,7 +244,7 @@ pub(crate) fn run_inference_blob_impl(
         .next()
         .ok_or_else(|| InferaError::OnnxError("No output tensor".to_string()))?;
     let output_array = output_tensor
-        .to_array_view::<f32>()
+        .to_plain_array_view::<f32>()
         .map_err(|e| InferaError::OnnxError(e.to_string()))?;
     let (output_rows, output_cols) = shape_rows_cols(output_array.shape());
     let output_data: Vec<f32> = output_array.iter().cloned().collect();
@@ -317,6 +314,31 @@ pub(crate) fn get_model_metadata_impl(_model_name: &str) -> Result<String, Infer
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "tract")]
+    #[test]
+    fn test_inference_outputs() {
+        let name = "engine_inference_outputs";
+        load_model_impl(name, "../test/models/linear.onnx").unwrap();
+        let data = [1.0_f32, 2.0, 3.0];
+        let blob: Vec<u8> = data.iter().flat_map(|value| value.to_ne_bytes()).collect();
+
+        let results = [
+            run_inference_impl(name, data.as_ptr(), 1, 3).unwrap(),
+            run_inference_blob_impl(name, blob.as_ptr(), blob.len()).unwrap(),
+        ];
+        for result in results {
+            assert_eq!(
+                (result.status, result.rows, result.cols, result.len),
+                (0, 1, 1, 1)
+            );
+            unsafe {
+                assert!((*result.data - 1.75).abs() < 1e-5);
+                crate::ffi_utils::infera_free_result(result);
+            }
+        }
+        MODELS.write().remove(name);
+    }
 
     #[test]
     fn test_shape_rows_cols() {

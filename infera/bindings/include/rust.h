@@ -7,7 +7,7 @@
 
 #pragma once
 
-/* Generated with cbindgen:0.26.0 */
+/* Generated with cbindgen:0.29.0 */
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -16,7 +16,7 @@
 
 #ifdef __cplusplus
 namespace infera {
-#endif // __cplusplus
+#endif  // __cplusplus
 
 /**
  * A C-compatible struct that holds the result of an inference operation.
@@ -316,13 +316,13 @@ struct InferaInferenceResult infera_predict_from_blob(const char *model_name,
  void infera_free_result(struct InferaInferenceResult res);
 
 #ifdef __cplusplus
-} // extern "C"
-#endif // __cplusplus
+}  // extern "C"
+#endif  // __cplusplus
 
 #ifdef __cplusplus
-} // namespace infera
-#endif // __cplusplus
+}  // namespace infera
+#endif  // __cplusplus
 
-#endif /* INFERA_H */
+#endif  /* INFERA_H */
 
 /* End of generated bindings */
