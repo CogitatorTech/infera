@@ -6,8 +6,7 @@
 statement ok
 pragma enable_verification
 
-statement ok
-load 'build/release/extension/infera/infera.duckdb_extension'
+require infera
 
 # ── Finding 1: predict volatile ────────────────────────────────────────────────
 # Load the linear model (y = 2*x1 - 1*x2 + 0.5*x3 + 0.25).

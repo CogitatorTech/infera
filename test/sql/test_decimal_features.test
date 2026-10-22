@@ -9,8 +9,7 @@
 statement ok
 pragma enable_verification
 
-statement ok
-load 'build/release/extension/infera/infera.duckdb_extension'
+require infera
 
 statement ok
 select infera_load_model('linear_dec', 'test/models/linear.onnx')
