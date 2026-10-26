@@ -593,7 +593,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 void InferaExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }
 std::string InferaExtension::Name() { return "infera"; }
-std::string InferaExtension::Version() const { return "v0.5.0"; }
+std::string InferaExtension::Version() const { return "v0.6.0"; }
 
 } // namespace duckdb
 
