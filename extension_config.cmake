@@ -1,5 +1,8 @@
 include_directories(${CMAKE_CURRENT_LIST_DIR}/infera/bindings/include)
 
+# Report the active C++ standard so DuckDB's skip-list header leaves nullptr alone.
+add_compile_options($<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/Zc:__cplusplus>)
+
 duckdb_extension_load(infera
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}
     LOAD_TESTS
